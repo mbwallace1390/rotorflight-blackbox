@@ -90,9 +90,239 @@ html.platform-android .file-open {
         -webkit-overflow-scrolling: touch;
     }
 
-    html.platform-android .modal-dialog {
+    /* Bootstrap's desktop dialogs assume a large monitor. On Android every
+     * modal becomes a full-screen, independently scrollable settings sheet. */
+    html.platform-android .modal {
+        padding: 0 !important;
+    }
+
+    html.platform-android .modal-dialog,
+    html.platform-android .user-settings-dialog .modal-dialog,
+    html.platform-android .graph-configuration-dialog .modal-dialog {
+        width: 100vw !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        height: 100vh;
+        margin: 0 !important;
+    }
+
+    html.platform-android .modal-content {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        min-height: 100vh;
+        max-height: 100vh;
+        border: 0;
+        border-radius: 0;
+    }
+
+    html.platform-android .modal-header,
+    html.platform-android .modal-footer {
+        flex: 0 0 auto;
+    }
+
+    html.platform-android .modal-header {
+        padding: 10px 12px;
+    }
+
+    html.platform-android .modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 10px;
+        overflow-x: auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    html.platform-android .modal-footer {
+        position: sticky;
+        bottom: 0;
+        z-index: 20;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #fff;
+        border-top: 1px solid #ddd;
+    }
+
+    html.platform-android .modal-footer .btn {
+        flex: 1 1 0;
+        margin: 0;
+    }
+
+    /* Advanced User Settings: remove the fixed 954px desktop width and stack
+     * both columns so every control is reachable in portrait orientation. */
+    html.platform-android .user-settings-dialog .cf_column,
+    html.platform-android .user-settings-dialog .cf_column.half,
+    html.platform-android .user-settings-dialog .cf_column.left,
+    html.platform-android .user-settings-dialog .cf_column.right {
+        float: none !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    html.platform-android .user-settings-dialog .spacer_left {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+
+    html.platform-android .user-settings-dialog .gui_box {
+        width: 100%;
+        margin-right: 0;
+        margin-left: 0;
+    }
+
+    html.platform-android .user-settings-dialog .spacer_box {
+        padding: 10px;
+    }
+
+    html.platform-android .user-settings-dialog table {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    html.platform-android .user-settings-dialog label.option {
+        min-height: 48px;
+        padding-top: 8px;
+        padding-right: 8px;
+    }
+
+    html.platform-android .user-settings-dialog label.option > span {
+        position: static !important;
+        display: block !important;
+        margin: 4px 0 0 0 !important;
+        padding-left: 74px;
+        line-height: 17px;
+    }
+
+    html.platform-android .user-settings-dialog input[type="checkbox"].ios-switch + div {
+        left: 54px;
+        top: 7px;
+    }
+
+    html.platform-android .user-settings-dialog input[type="number"],
+    html.platform-android .user-settings-dialog input[type="text"] {
+        width: 76px;
+        min-width: 76px;
+        min-height: 44px;
+    }
+
+    html.platform-android .user-settings-dialog select {
         width: auto;
-        margin: 8px;
+        min-width: 140px;
+        min-height: 44px;
+        margin-left: 0;
+    }
+
+    html.platform-android .user-settings-dialog input[type="radio"] {
+        width: 24px;
+        height: 24px;
+        margin-top: 8px;
+        margin-bottom: 8px;
+    }
+
+    /* Graph setup: keep the complete desktop editor, but make the field
+     * settings table explicitly swipeable instead of clipping its columns. */
+    html.platform-android .graph-configuration-dialog .config-graphs-list {
+        margin-top: 12px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph {
+        margin-bottom: 14px;
+        padding: 8px;
+        overflow: visible;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph .form-group {
+        margin-right: 0;
+        margin-left: 0;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph .control-label,
+    html.platform-android .graph-configuration-dialog .config-graph .col-sm-2,
+    html.platform-android .graph-configuration-dialog .config-graph .col-sm-10 {
+        float: none;
+        width: 100%;
+        padding-right: 0;
+        padding-left: 0;
+        text-align: left;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-header .col-sm-10 {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list {
+        display: table;
+        width: 780px;
+        min-width: 780px;
+        table-layout: fixed;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list th,
+    html.platform-android .graph-configuration-dialog .config-graph-field-list td {
+        padding: 4px;
+        vertical-align: middle;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list th[name="field"],
+    html.platform-android .graph-configuration-dialog .config-graph-field-list td:first-child {
+        width: 220px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list input.form-control {
+        width: 76px;
+        min-width: 76px;
+        padding-right: 6px;
+        padding-left: 6px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list select.form-control {
+        width: 210px;
+        min-width: 210px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list select.color-picker {
+        width: 64px;
+        min-width: 64px;
+        height: 44px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-field-list input[type="checkbox"] {
+        width: 24px;
+        height: 24px;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-header {
+        width: 100%;
+    }
+
+    html.platform-android .graph-configuration-dialog .config-graph-header input.form-control {
+        width: calc(100% - 64px) !important;
+        min-width: 180px;
+    }
+
+    html.platform-android .graph-configuration-dialog .graph-height {
+        width: 56px;
+        min-width: 56px;
+    }
+
+    html.platform-android .graph-configuration-dialog .add-field-button,
+    html.platform-android .graph-configuration-dialog .remove-single-graph-button,
+    html.platform-android .graph-configuration-dialog .config-graphs-add,
+    html.platform-android .graph-configuration-dialog .config-graphs-remove-all-graphs {
+        min-height: 44px;
     }
 
     html.platform-android .dialogUpdate {
