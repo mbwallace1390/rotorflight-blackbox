@@ -96,7 +96,9 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          gradle -p android assembleDebug --stacktrace 2>&1 | tee android-build.log
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_PREFS_ROOT="$HOME/.android"
+          gradle -Duser.home="$HOME" -p android assembleDebug --stacktrace 2>&1 | tee android-build.log
 
       - name: Upload Android build diagnostics
         if: always()
