@@ -7,6 +7,7 @@ plugins {
 
 val webRoot = rootProject.projectDir.parentFile
 val generatedWebAssets = layout.buildDirectory.dir("generated/webAssets")
+val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 
 val syncWebAssets by tasks.registering(Sync::class) {
     from(webRoot) {
@@ -48,8 +49,8 @@ android {
         applicationId = "org.rotorflight.blackbox"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = ciRunNumber
+        versionName = "0.1.$ciRunNumber"
     }
 
     buildFeatures {
