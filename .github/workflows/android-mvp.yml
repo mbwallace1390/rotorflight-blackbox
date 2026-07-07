@@ -1,12 +1,20 @@
 name: Android MVP
 
-# The Android artifact workflow runs only for branch pushes so one job owns the
-# development signing cache and every test APK keeps the same certificate.
+# Serialize Android artifact builds so only one job can create or save the
+# development signing key at a time.
 on:
   workflow_dispatch:
   push:
     branches:
       - android-mvp
+    paths:
+      - "android/**"
+      - "css/android.css"
+      - "index.js"
+      - "js/localization.js"
+      - "js/pref_storage.js"
+      - ".github/workflows/android-mvp.yml"
+  pull_request:
     paths:
       - "android/**"
       - "css/android.css"
@@ -55,13 +63,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
-          key: rotorflight-blackbox-android-debug-signing-v2
+          key: rotorflight-blackbox-android-debug-signing-v3
 
-      - name: Create Android test signing key
+      - name: Create or verify Android test signing key
         shell: bash
         run: |
           mkdir -p "$HOME/.android"
+          echo "cache-hit=${{ steps.signing-key-cache.outputs.cache-hit }}" > android-signing-cache.txt
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            echo "generated-new-key=true" >> android-signing-cache.txt
             keytool -genkeypair \
               -keystore "$HOME/.android/debug.keystore" \
               -storepass android \
@@ -71,6 +81,8 @@ jobs:
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000
+          else
+            echo "generated-new-key=false" >> android-signing-cache.txt
           fi
           keytool -list -v \
             -keystore "$HOME/.android/debug.keystore" \
@@ -103,6 +115,7 @@ jobs:
           name: rotorflight-blackbox-android-build-log
           path: |
             android-build.log
+            android-signing-cache.txt
             android-signing-certificate.txt
           if-no-files-found: error
 
