@@ -1,0 +1,112 @@
+/* Android-specific layout and touch adjustments.
+ * Activated by index.js when the native Android WebView user agent is detected.
+ */
+
+html.platform-android,
+html.platform-android body {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    overscroll-behavior: none;
+}
+
+html.platform-android body {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+html.platform-android input,
+html.platform-android textarea,
+html.platform-android select {
+    font-size: 16px;
+}
+
+html.platform-android .btn,
+html.platform-android button,
+html.platform-android .form-control {
+    min-height: 44px;
+}
+
+html.platform-android .btn-new-window,
+html.platform-android .btn-video-export,
+html.platform-android .btn-workspaces-export,
+html.platform-android .btn-csv-export,
+html.platform-android .open-keys-dialog {
+    display: none !important;
+}
+
+html.platform-android .welcome-pane .container,
+html.platform-android .header-pane {
+    width: 100%;
+}
+
+html.platform-android .welcome-pane .jumbotron {
+    margin-bottom: 12px;
+    padding: 24px 16px;
+    border-radius: 0;
+}
+
+html.platform-android .welcome-pane .jumbotron h1 {
+    font-size: 30px;
+}
+
+html.platform-android .file-open {
+    cursor: pointer;
+}
+
+@media (max-width: 900px) {
+    html.platform-android .main-pane {
+        padding-right: 0;
+        padding-left: 0;
+    }
+
+    html.platform-android .navbar {
+        margin-bottom: 0;
+    }
+
+    html.platform-android .navbar-brand {
+        max-width: calc(100vw - 80px);
+    }
+
+    html.platform-android .video-top-controls {
+        display: flex;
+        width: 100%;
+        margin: 0;
+        padding: 6px;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    html.platform-android .video-top-controls > li {
+        flex: 0 0 auto;
+    }
+
+    html.platform-android .log-field-values,
+    html.platform-android .configuration-file {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    html.platform-android .modal-dialog {
+        width: auto;
+        margin: 8px;
+    }
+
+    html.platform-android .dialogUpdate {
+        width: calc(100vw - 24px);
+        max-width: 520px;
+    }
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+    html.platform-android .welcome-pane .row > div {
+        width: 100%;
+    }
+
+    html.platform-android .log-graph {
+        min-height: 52vh;
+    }
+}
