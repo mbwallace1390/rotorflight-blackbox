@@ -1,0 +1,136 @@
+/* Android control fallbacks layered over the existing mobile layout. */
+
+html.platform-android select,
+html.platform-android select.form-control,
+html.platform-android select.color-picker {
+    position: relative;
+    z-index: 2;
+    color: #222 !important;
+    background-color: #fff !important;
+    -webkit-appearance: menulist !important;
+    appearance: auto !important;
+    pointer-events: auto !important;
+    touch-action: auto !important;
+}
+
+html.platform-android select option {
+    color: #222 !important;
+    background: #fff !important;
+}
+
+html.platform-android .modal-footer {
+    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+}
+
+html.platform-android.android-select-open,
+html.platform-android.android-select-open body {
+    overflow: hidden !important;
+}
+
+.android-select-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: flex;
+    align-items: flex-end;
+    justify-content: stretch;
+    background: rgba(0, 0, 0, 0.52);
+}
+
+.android-select-sheet {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: min(78vh, 720px);
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.android-select-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 58px;
+    padding: 8px 12px 8px 18px;
+    border-bottom: 1px solid #ddd;
+}
+
+.android-select-title {
+    min-width: 0;
+    overflow: hidden;
+    color: #222;
+    font-size: 20px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.android-select-cancel {
+    flex: 0 0 auto;
+    min-width: 88px;
+    min-height: 44px;
+    padding: 8px 14px;
+    color: #0b5da7;
+    font-size: 16px;
+    font-weight: 600;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+}
+
+.android-select-options {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 6px 10px 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.android-select-option {
+    display: block;
+    width: 100%;
+    min-height: 52px;
+    margin: 2px 0;
+    padding: 10px 14px;
+    overflow: hidden;
+    color: #222;
+    font-size: 17px;
+    line-height: 24px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #fff;
+    border: 0;
+    border-radius: 10px;
+}
+
+.android-select-option.selected {
+    color: #064f8f;
+    font-weight: 700;
+    background: #dceeff;
+}
+
+.android-select-option:active {
+    background: #e8e8e8;
+}
+
+.android-select-option:disabled {
+    color: #999;
+    background: #f5f5f5;
+}
+
+@media (orientation: landscape) {
+    .android-select-sheet {
+        max-height: 92vh;
+        width: min(720px, 100%);
+        margin: 0 auto;
+        border-radius: 18px 18px 0 0;
+    }
+}
