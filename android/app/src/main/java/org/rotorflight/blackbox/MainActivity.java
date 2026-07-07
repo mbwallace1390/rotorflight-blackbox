@@ -5,8 +5,10 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -18,18 +20,30 @@ import android.widget.Toast;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 
+import org.json.JSONObject;
+
+import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/index.html";
+    private static final String SHARED_LOG_URL = "https://" + LOCAL_HOST + "/shared/current";
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private volatile Uri sharedLogUri;
+    private volatile String sharedLogName;
+    private boolean pageReady;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,12 +52,20 @@ public final class MainActivity extends Activity {
 
         webView = findViewById(R.id.web_view);
         configureWebView();
+        processIncomingIntent(getIntent());
 
         if (savedInstanceState == null) {
             webView.loadUrl(START_URL);
         } else {
             webView.restoreState(savedInstanceState);
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        processIncomingIntent(intent);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -70,9 +92,10 @@ public final class MainActivity extends Activity {
                 "/assets/",
                 new WebViewAssetLoader.AssetsPathHandler(this)
             )
+            .addPathHandler("/shared/", new SharedLogPathHandler())
             .build();
 
-        webView.setWebViewClient(new LocalContentWebViewClient(this, assetLoader));
+        webView.setWebViewClient(new LocalContentWebViewClient(assetLoader));
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(
@@ -84,6 +107,75 @@ public final class MainActivity extends Activity {
                 return true;
             }
         });
+    }
+
+    private void processIncomingIntent(Intent intent) {
+        if (intent == null) {
+            return;
+        }
+
+        Uri uri = null;
+        String action = intent.getAction();
+
+        if (Intent.ACTION_VIEW.equals(action)) {
+            uri = intent.getData();
+        } else if (Intent.ACTION_SEND.equals(action)) {
+            uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        }
+
+        if (uri == null && intent.getClipData() != null && intent.getClipData().getItemCount() > 0) {
+            uri = intent.getClipData().getItemAt(0).getUri();
+        }
+
+        if (uri == null) {
+            return;
+        }
+
+        sharedLogUri = uri;
+        sharedLogName = resolveDisplayName(uri);
+        dispatchSharedLogIfReady();
+    }
+
+    private String resolveDisplayName(Uri uri) {
+        if ("content".equalsIgnoreCase(uri.getScheme())) {
+            try (Cursor cursor = getContentResolver().query(
+                uri,
+                new String[] { OpenableColumns.DISPLAY_NAME },
+                null,
+                null,
+                null
+            )) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (column >= 0) {
+                        String name = cursor.getString(column);
+                        if (name != null && !name.isBlank()) {
+                            return name;
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // Fall back to the final URI path segment below.
+            }
+        }
+
+        String segment = uri.getLastPathSegment();
+        return segment == null || segment.isBlank() ? "BLACKBOX_LOG.BBL" : segment;
+    }
+
+    private void dispatchSharedLogIfReady() {
+        if (!pageReady || webView == null || sharedLogUri == null) {
+            return;
+        }
+
+        String requestUrl = SHARED_LOG_URL + "?t=" + System.nanoTime();
+        String script = "window.openRotorflightSharedFile("
+            + JSONObject.quote(requestUrl)
+            + ","
+            + JSONObject.quote(sharedLogName)
+            + ");";
+
+        webView.post(() -> webView.evaluateJavascript(script, null));
     }
 
     private void launchDocumentPicker(
@@ -233,12 +325,58 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private static final class LocalContentWebViewClient extends WebViewClientCompat {
-        private final Activity activity;
+    private final class SharedLogPathHandler implements WebViewAssetLoader.PathHandler {
+        @Override
+        public WebResourceResponse handle(String path) {
+            Uri uri = sharedLogUri;
+            if (uri == null) {
+                return errorResponse(404, "No shared Blackbox log is available");
+            }
+
+            try {
+                InputStream stream = getContentResolver().openInputStream(uri);
+                if (stream == null) {
+                    return errorResponse(404, "Unable to open shared Blackbox log");
+                }
+
+                String mimeType = getContentResolver().getType(uri);
+                if (mimeType == null || mimeType.isBlank()) {
+                    mimeType = "application/octet-stream";
+                }
+
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Cache-Control", "no-store");
+                return new WebResourceResponse(
+                    mimeType,
+                    null,
+                    200,
+                    "OK",
+                    headers,
+                    stream
+                );
+            } catch (FileNotFoundException | SecurityException error) {
+                return errorResponse(404, "Shared Blackbox log is no longer readable");
+            }
+        }
+
+        private WebResourceResponse errorResponse(int status, String message) {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Cache-Control", "no-store");
+            return new WebResourceResponse(
+                "text/plain",
+                "UTF-8",
+                status,
+                message,
+                headers,
+                new ByteArrayInputStream(message.getBytes(StandardCharsets.UTF_8))
+            );
+        }
+    }
+
+    private final class LocalContentWebViewClient extends WebViewClientCompat {
         private final WebViewAssetLoader assetLoader;
 
-        LocalContentWebViewClient(Activity activity, WebViewAssetLoader assetLoader) {
-            this.activity = activity;
+        LocalContentWebViewClient(WebViewAssetLoader assetLoader) {
             this.assetLoader = assetLoader;
         }
 
@@ -254,6 +392,15 @@ public final class MainActivity extends Activity {
         @SuppressWarnings("deprecation")
         public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
             return assetLoader.shouldInterceptRequest(Uri.parse(url));
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
+            if (url != null && url.startsWith("https://" + LOCAL_HOST + "/assets/")) {
+                pageReady = true;
+                dispatchSharedLogIfReady();
+            }
         }
 
         @Override
@@ -283,10 +430,10 @@ public final class MainActivity extends Activity {
             }
 
             try {
-                activity.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                startActivity(new Intent(Intent.ACTION_VIEW, uri));
             } catch (ActivityNotFoundException error) {
                 Toast.makeText(
-                    activity,
+                    MainActivity.this,
                     R.string.no_external_app,
                     Toast.LENGTH_SHORT
                 ).show();
