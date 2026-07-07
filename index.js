@@ -4,6 +4,7 @@ var RotorflightPlatform = detectPlatform();
 window.RotorflightPlatform = RotorflightPlatform;
 
 applyPlatformStyles();
+recoverAndroidViewerStartup();
 openLinksInExternalBrowserByDefault();
 installAndroidSharedFileBridge();
 
@@ -39,6 +40,50 @@ function applyPlatformStyles() {
         root.classList.add("platform-nwjs");
     } else {
         root.classList.add("platform-browser");
+    }
+}
+
+function recoverAndroidViewerStartup() {
+    if (!RotorflightPlatform.android || window.blackboxLogViewer) {
+        return;
+    }
+
+    // Android's localStorage-backed PrefStorage invokes callbacks immediately.
+    // On a clean install main.js asks GraphConfig for example graphs before a
+    // flightLog exists, which aborts BlackboxLogViewer construction before its
+    // document-ready handlers (including Graph setup) are registered. Seed a
+    // log-independent starter config and construct the viewer again.
+    var starterGraphs = [
+        {
+            label: "Gyros",
+            height: 2,
+            fields: [
+                { name: "gyroADC[all]" },
+            ],
+        },
+        {
+            label: "Motors",
+            height: 1,
+            fields: [
+                { name: "motor[all]" },
+            ],
+        },
+    ];
+
+    try {
+        var storedGraphs = JSON.parse(window.localStorage.getItem("graphConfig"));
+        if (!Array.isArray(storedGraphs) || storedGraphs.length === 0) {
+            window.localStorage.setItem("graphConfig", JSON.stringify(starterGraphs));
+        }
+    } catch (storageError) {
+        console.warn("Unable to seed Android graph defaults", storageError);
+    }
+
+    try {
+        window.blackboxLogViewer = new BlackboxLogViewer();
+    } catch (startupError) {
+        console.error("Unable to recover Android Blackbox viewer startup", startupError);
+        alert("Unable to initialize the Blackbox viewer: " + startupError.message);
     }
 }
 
