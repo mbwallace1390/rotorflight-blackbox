@@ -62,24 +62,39 @@ function PrefStorage(keyPrefix) {
 
         mode;
 
+    function deliverAfterViewerSetup(callback, value) {
+        var deliver = function () {
+            window.setTimeout(function () {
+                callback(value);
+            }, 0);
+        };
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", deliver, { once: true });
+        } else {
+            deliver();
+        }
+    }
+
     /**
-     * Fetch the value with the given name, calling the onGet handler (possibly asynchronously) with the retrieved
-     * value, or null if the value didn't exist.
+     * Fetch the value with the given name, calling the onGet handler asynchronously with the retrieved
+     * value, or null if the value didn't exist. Matching chrome.storage's asynchronous behavior is
+     * important because main.js creates workspace controls in its document-ready handler.
      */
     this.get = function(name, onGet) {
         name = keyPrefix + name;
 
         switch (mode) {
             case LOCALSTORAGE:
-                var
-                    parsed = null;
+                var parsed = null;
 
                 try {
                     parsed = JSON.parse(window.localStorage[name]);
                 } catch (e) {
+                    // Missing or malformed values are reported as null.
                 }
 
-                onGet(parsed);
+                deliverAfterViewerSetup(onGet, parsed);
             break;
             case CHROME_STORAGE_LOCAL:
                 chrome.storage.local.get(name, function(data) {
@@ -100,8 +115,7 @@ function PrefStorage(keyPrefix) {
                 window.localStorage[name] = JSON.stringify(value);
             break;
             case CHROME_STORAGE_LOCAL:
-                var
-                    data = {};
+                var data = {};
 
                 data[name] = value;
                 chrome.storage.local.set(data);
