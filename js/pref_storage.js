@@ -1,5 +1,11 @@
 "use strict";
 
+// Some optional desktop-only code checks the global `chrome` identifier directly.
+// Keep those capability checks safe in Android WebView and ordinary browsers.
+if (typeof window.chrome === "undefined") {
+    window.chrome = {};
+}
+
 /**
  * The viewer still contains a few NW.js startup hooks in main.js. Native web
  * containers such as Android WebView do not provide require("nw.gui"), so give
