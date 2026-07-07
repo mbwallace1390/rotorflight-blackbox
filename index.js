@@ -34,6 +34,16 @@ function applyPlatformStyles() {
         stylesheet.rel = "stylesheet";
         stylesheet.href = "css/android.css";
         document.head.appendChild(stylesheet);
+
+        var controlsStylesheet = document.createElement("link");
+        controlsStylesheet.rel = "stylesheet";
+        controlsStylesheet.href = "css/android_controls.css";
+        document.head.appendChild(controlsStylesheet);
+
+        var controlsScript = document.createElement("script");
+        controlsScript.src = "js/android_controls.js";
+        controlsScript.defer = true;
+        document.head.appendChild(controlsScript);
     } else if (RotorflightPlatform.nwjs) {
         root.classList.add("platform-nwjs");
     } else {
@@ -95,7 +105,6 @@ function checkForConfiguratorUpdates() {
         "configurator",
         "https://api.github.com/repos/rotorflight/rotorflight-blackbox/releases"
     );
-
     releaseChecker.loadReleaseData(notifyOutdatedVersion);
 }
 
@@ -103,7 +112,6 @@ function notifyOutdatedVersion(releaseData) {
     var storage = window.chrome
         && window.chrome.storage
         && window.chrome.storage.local;
-
     if (!storage) {
         return;
     }
