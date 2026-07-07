@@ -23,15 +23,22 @@ import androidx.webkit.WebViewClientCompat;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
@@ -39,10 +46,13 @@ public final class MainActivity extends Activity {
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/index.html";
     private static final String SHARED_LOG_URL = "https://" + LOCAL_HOST + "/shared/current";
 
+    private final ExecutorService importExecutor = Executors.newSingleThreadExecutor();
+
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
-    private volatile Uri sharedLogUri;
+    private volatile File sharedLogFile;
     private volatile String sharedLogName;
+    private volatile String sharedLogMimeType = "application/octet-stream";
     private boolean pageReady;
 
     @Override
@@ -127,13 +137,89 @@ public final class MainActivity extends Activity {
             uri = intent.getClipData().getItemAt(0).getUri();
         }
 
-        if (uri == null) {
-            return;
+        if (uri != null) {
+            importSharedLog(uri);
         }
+    }
 
-        sharedLogUri = uri;
-        sharedLogName = resolveDisplayName(uri);
-        dispatchSharedLogIfReady();
+    private void importSharedLog(Uri uri) {
+        final String displayName = resolveDisplayName(uri);
+        final String mimeType = resolveMimeType(uri);
+
+        importExecutor.execute(() -> {
+            File importDirectory = new File(getCacheDir(), "imported-logs");
+            if (!importDirectory.exists() && !importDirectory.mkdirs()) {
+                showImportError("Unable to create Blackbox log storage.");
+                return;
+            }
+
+            File destination = new File(
+                importDirectory,
+                "blackbox-" + System.nanoTime() + ".bin"
+            );
+
+            try (
+                InputStream input = getContentResolver().openInputStream(uri);
+                FileOutputStream output = new FileOutputStream(destination)
+            ) {
+                if (input == null) {
+                    throw new FileNotFoundException("Selected log is unavailable");
+                }
+
+                byte[] buffer = new byte[128 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, count);
+                }
+                output.flush();
+            } catch (IOException | SecurityException error) {
+                destination.delete();
+                showImportError("Unable to copy the selected Blackbox log.");
+                return;
+            }
+
+            if (!destination.isFile() || destination.length() == 0) {
+                destination.delete();
+                showImportError("The selected Blackbox log was empty.");
+                return;
+            }
+
+            runOnUiThread(() -> {
+                File previousFile = sharedLogFile;
+                sharedLogFile = destination;
+                sharedLogName = displayName;
+                sharedLogMimeType = mimeType;
+
+                if (previousFile != null && !previousFile.equals(destination)) {
+                    previousFile.delete();
+                }
+
+                dispatchSharedLogIfReady();
+                Toast.makeText(
+                    MainActivity.this,
+                    "Log copied to Blackbox. Eject the USB drive before unplugging it.",
+                    Toast.LENGTH_LONG
+                ).show();
+            });
+        });
+    }
+
+    private void showImportError(String message) {
+        runOnUiThread(() ->
+            Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show()
+        );
+    }
+
+    private String resolveMimeType(Uri uri) {
+        try {
+            String type = getContentResolver().getType(uri);
+            if (type != null && !type.trim().isEmpty()) {
+                return type;
+            }
+        } catch (RuntimeException ignored) {
+            // Use the binary fallback below.
+        }
+        return "application/octet-stream";
     }
 
     private String resolveDisplayName(Uri uri) {
@@ -149,7 +235,7 @@ public final class MainActivity extends Activity {
                     int column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
                     if (column >= 0) {
                         String name = cursor.getString(column);
-                        if (name != null && !name.isBlank()) {
+                        if (name != null && !name.trim().isEmpty()) {
                             return name;
                         }
                     }
@@ -160,11 +246,24 @@ public final class MainActivity extends Activity {
         }
 
         String segment = uri.getLastPathSegment();
-        return segment == null || segment.isBlank() ? "BLACKBOX_LOG.BBL" : segment;
+        return segment == null || segment.trim().isEmpty()
+            ? "BLACKBOX_LOG.BBL"
+            : segment;
+    }
+
+    private static boolean isBlackboxLogName(String fileName) {
+        String normalized = fileName == null
+            ? ""
+            : fileName.toLowerCase(Locale.ROOT);
+        return normalized.endsWith(".bbl")
+            || normalized.endsWith(".txt")
+            || normalized.endsWith(".cfl")
+            || normalized.endsWith(".bfl")
+            || normalized.endsWith(".log");
     }
 
     private void dispatchSharedLogIfReady() {
-        if (!pageReady || webView == null || sharedLogUri == null) {
+        if (!pageReady || webView == null || sharedLogFile == null) {
             return;
         }
 
@@ -247,13 +346,16 @@ public final class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) {
+        if (requestCode != FILE_CHOOSER_REQUEST) {
             return;
         }
 
+        ValueCallback<Uri[]> callback = filePathCallback;
+        filePathCallback = null;
+
         Uri[] results = null;
+        List<Uri> selectedUris = new ArrayList<>();
         if (resultCode == RESULT_OK && data != null) {
-            List<Uri> selectedUris = new ArrayList<>();
             ClipData clipData = data.getClipData();
 
             if (clipData != null) {
@@ -275,8 +377,24 @@ public final class MainActivity extends Activity {
             }
         }
 
-        filePathCallback.onReceiveValue(results);
-        filePathCallback = null;
+        if (!selectedUris.isEmpty()) {
+            Uri firstUri = selectedUris.get(0);
+            String firstName = resolveDisplayName(firstUri);
+            if (isBlackboxLogName(firstName)) {
+                // Route logs through the same cache-backed import used by the
+                // Configurator handoff. This remains reliable even if WebView's
+                // file chooser callback is lost or returns an unreadable URI.
+                importSharedLog(firstUri);
+                if (callback != null) {
+                    callback.onReceiveValue(null);
+                }
+                return;
+            }
+        }
+
+        if (callback != null) {
+            callback.onReceiveValue(results);
+        }
     }
 
     private void persistReadPermission(Uri uri, int resultFlags) {
@@ -288,8 +406,8 @@ public final class MainActivity extends Activity {
         try {
             getContentResolver().takePersistableUriPermission(uri, takeFlags);
         } catch (SecurityException ignored) {
-            // Some document providers grant temporary access only. That is enough
-            // for the current Blackbox session.
+            // Some document providers grant temporary access only. The log is
+            // copied into app-owned storage immediately after selection.
         }
     }
 
@@ -316,6 +434,8 @@ public final class MainActivity extends Activity {
             filePathCallback = null;
         }
 
+        importExecutor.shutdownNow();
+
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
@@ -328,33 +448,24 @@ public final class MainActivity extends Activity {
     private final class SharedLogPathHandler implements WebViewAssetLoader.PathHandler {
         @Override
         public WebResourceResponse handle(String path) {
-            Uri uri = sharedLogUri;
-            if (uri == null) {
+            File file = sharedLogFile;
+            if (file == null || !file.isFile()) {
                 return errorResponse(404, "No shared Blackbox log is available");
             }
 
             try {
-                InputStream stream = getContentResolver().openInputStream(uri);
-                if (stream == null) {
-                    return errorResponse(404, "Unable to open shared Blackbox log");
-                }
-
-                String mimeType = getContentResolver().getType(uri);
-                if (mimeType == null || mimeType.isBlank()) {
-                    mimeType = "application/octet-stream";
-                }
-
+                InputStream stream = new FileInputStream(file);
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Cache-Control", "no-store");
                 return new WebResourceResponse(
-                    mimeType,
+                    sharedLogMimeType,
                     null,
                     200,
                     "OK",
                     headers,
                     stream
                 );
-            } catch (FileNotFoundException | SecurityException error) {
+            } catch (FileNotFoundException error) {
                 return errorResponse(404, "Shared Blackbox log is no longer readable");
             }
         }
