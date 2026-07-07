@@ -1,19 +1,9 @@
 name: Android MVP
 
-# Serialize Android artifact builds so only one job can create or save the
-# development signing key at a time. Verification pass: 2.
+# Build test APKs from one event/ref so the development signing cache has one
+# stable lineage. Branch-push and pull-request caches are intentionally not mixed.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - android-mvp
-    paths:
-      - "android/**"
-      - "css/android.css"
-      - "index.js"
-      - "js/localization.js"
-      - "js/pref_storage.js"
-      - ".github/workflows/android-mvp.yml"
   pull_request:
     paths:
       - "android/**"
@@ -27,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rotorflight-blackbox-android-signing
+  group: rotorflight-blackbox-android-signing-v4
   cancel-in-progress: false
 
 jobs:
@@ -63,7 +53,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
-          key: rotorflight-blackbox-android-debug-signing-v3
+          key: rotorflight-blackbox-android-debug-signing-v4
 
       - name: Create or verify Android test signing key
         shell: bash
