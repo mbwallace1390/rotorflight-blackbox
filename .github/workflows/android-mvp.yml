@@ -64,11 +64,29 @@ jobs:
           gradle-version: "9.4.1"
 
       - name: Build debug APK
-        run: gradle -p android assembleDebug --stacktrace
+        id: android-build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle -p android assembleDebug --stacktrace 2>&1 | tee android-build.log
+
+      - name: Upload Android build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rotorflight-blackbox-android-build-log
+          path: android-build.log
+          if-no-files-found: error
 
       - name: Upload debug APK
+        if: steps.android-build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: rotorflight-blackbox-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Report Android build failure
+        if: steps.android-build.outcome != 'success'
+        run: exit 1
