@@ -5,6 +5,7 @@ window.RotorflightPlatform = RotorflightPlatform;
 
 applyPlatformStyles();
 openLinksInExternalBrowserByDefault();
+installAndroidSharedFileBridge();
 
 $(document).ready(function () {
     // Translate to the user-selected language.
@@ -39,6 +40,40 @@ function applyPlatformStyles() {
     } else {
         root.classList.add("platform-browser");
     }
+}
+
+function installAndroidSharedFileBridge() {
+    if (!RotorflightPlatform.android) {
+        return;
+    }
+
+    window.openRotorflightSharedFile = async function (url, fileName) {
+        try {
+            var response = await fetch(url, { cache: "no-store" });
+            if (!response.ok) {
+                throw new Error("Unable to read shared log (HTTP " + response.status + ")");
+            }
+
+            var blob = await response.blob();
+            var file = new File([blob], fileName || "BLACKBOX_LOG.BBL", {
+                type: blob.type || "application/octet-stream",
+                lastModified: Date.now(),
+            });
+
+            var input = document.querySelector("input.file-open");
+            if (!input) {
+                throw new Error("Blackbox file input is unavailable");
+            }
+
+            var transfer = new DataTransfer();
+            transfer.items.add(file);
+            input.files = transfer.files;
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch (error) {
+            console.error("Unable to open Android-shared Blackbox log", error);
+            alert("Unable to open the shared Blackbox log: " + error.message);
+        }
+    };
 }
 
 function checkForConfiguratorUpdates() {
