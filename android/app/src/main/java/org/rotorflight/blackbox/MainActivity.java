@@ -29,6 +29,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +46,24 @@ public final class MainActivity extends Activity {
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/index.html";
     private static final String SHARED_LOG_URL = "https://" + LOCAL_HOST + "/shared/current";
+
+    private static final String ANDROID_MAIN_SCRIPT_SHIM =
+        "if (navigator.userAgent.indexOf('RotorflightBlackboxAndroid/') !== -1) {\n"
+            + "  window.require = window.require || function(name) {\n"
+            + "    if (name === 'nw.gui') {\n"
+            + "      return {\n"
+            + "        App: { argv: [], on: function() {} },\n"
+            + "        Window: {\n"
+            + "          getAll: function() { return []; },\n"
+            + "          current: function() { return { id: 'android' }; },\n"
+            + "          open: function() {}\n"
+            + "        },\n"
+            + "        Shell: { openExternal: function(url) { window.location.href = url; } }\n"
+            + "      };\n"
+            + "    }\n"
+            + "    throw new Error('Module unavailable on Android: ' + name);\n"
+            + "  };\n"
+            + "}\n";
 
     private final ExecutorService importExecutor = Executors.newSingleThreadExecutor();
 
@@ -98,10 +117,7 @@ public final class MainActivity extends Activity {
         );
 
         WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
-            .addPathHandler(
-                "/assets/",
-                new WebViewAssetLoader.AssetsPathHandler(this)
-            )
+            .addPathHandler("/assets/", new AndroidAssetsPathHandler())
             .addPathHandler("/shared/", new SharedLogPathHandler())
             .build();
 
@@ -443,6 +459,39 @@ public final class MainActivity extends Activity {
         }
 
         super.onDestroy();
+    }
+
+    private final class AndroidAssetsPathHandler implements WebViewAssetLoader.PathHandler {
+        private final WebViewAssetLoader.AssetsPathHandler delegate =
+            new WebViewAssetLoader.AssetsPathHandler(MainActivity.this);
+
+        @Override
+        public WebResourceResponse handle(String path) {
+            String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+            if (!"js/main.js".equals(normalizedPath)) {
+                return delegate.handle(path);
+            }
+
+            try {
+                InputStream shim = new ByteArrayInputStream(
+                    ANDROID_MAIN_SCRIPT_SHIM.getBytes(StandardCharsets.UTF_8)
+                );
+                InputStream original = getAssets().open("js/main.js");
+                InputStream combined = new SequenceInputStream(shim, original);
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Cache-Control", "no-store");
+                return new WebResourceResponse(
+                    "application/javascript",
+                    "UTF-8",
+                    200,
+                    "OK",
+                    headers,
+                    combined
+                );
+            } catch (IOException error) {
+                return delegate.handle(path);
+            }
+        }
     }
 
     private final class SharedLogPathHandler implements WebViewAssetLoader.PathHandler {
