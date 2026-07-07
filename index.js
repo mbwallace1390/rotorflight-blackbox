@@ -54,41 +54,20 @@ function installAndroidSharedFileBridge() {
     }
 
     async function deliverFileToViewer(file) {
-        var input;
-
-        // main.js registers Rotorflight's normal file-input change handler.
-        // The BlackboxLogViewer instance is intentionally not exposed as a
-        // dependable global, so readiness is determined from the real input
-        // element and jQuery instead.
-        for (var attempt = 0; attempt < 60; attempt++) {
-            input = document.querySelector("input.file-open");
-
-            if (input && window.jQuery && document.readyState !== "loading") {
-                try {
-                    Object.defineProperty(input, "files", {
-                        configurable: true,
-                        get: function () {
-                            return [file];
-                        },
-                    });
-
-                    window.jQuery(input).trigger("change");
-                    delete input.files;
-                    return;
-                } catch (error) {
-                    try {
-                        delete input.files;
-                    } catch (cleanupError) {
-                        console.warn("Unable to restore Android file input", cleanupError);
-                    }
-                    throw error;
-                }
+        // The Android asset handler exposes the viewer's real closed-over
+        // loadFiles() function as RotorflightBlackboxOpenFiles. Calling that
+        // function avoids synthetic FileList assignment and jQuery event
+        // simulation, both of which are unreliable in Android WebView.
+        for (var attempt = 0; attempt < 100; attempt++) {
+            if (typeof window.RotorflightBlackboxOpenFiles === "function") {
+                window.RotorflightBlackboxOpenFiles([file]);
+                return;
             }
 
             await sleep(100);
         }
 
-        throw new Error("Rotorflight file input is not ready");
+        throw new Error("Rotorflight parser entry point is not ready");
     }
 
     window.openRotorflightSharedFile = async function (url, fileName) {
