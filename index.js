@@ -56,14 +56,14 @@ function installAndroidSharedFileBridge() {
     async function deliverFileToViewer(file) {
         var input;
 
-        // main.js registers the normal Rotorflight file-input change handler.
-        // Android WebView rejects DataTransfer-based FileList assignment, so
-        // temporarily expose the real cached File through the input's files
-        // property and dispatch an ordinary change event.
+        // main.js registers Rotorflight's normal file-input change handler.
+        // The BlackboxLogViewer instance is intentionally not exposed as a
+        // dependable global, so readiness is determined from the real input
+        // element and jQuery instead.
         for (var attempt = 0; attempt < 60; attempt++) {
             input = document.querySelector("input.file-open");
 
-            if (input && window.blackboxLogViewer && document.readyState !== "loading") {
+            if (input && window.jQuery && document.readyState !== "loading") {
                 try {
                     Object.defineProperty(input, "files", {
                         configurable: true,
@@ -72,7 +72,7 @@ function installAndroidSharedFileBridge() {
                         },
                     });
 
-                    input.dispatchEvent(new Event("change", { bubbles: true }));
+                    window.jQuery(input).trigger("change");
                     delete input.files;
                     return;
                 } catch (error) {
@@ -88,7 +88,7 @@ function installAndroidSharedFileBridge() {
             await sleep(100);
         }
 
-        throw new Error("Rotorflight log loader is not ready");
+        throw new Error("Rotorflight file input is not ready");
     }
 
     window.openRotorflightSharedFile = async function (url, fileName) {
