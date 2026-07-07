@@ -47,6 +47,54 @@ function installAndroidSharedFileBridge() {
         return;
     }
 
+    function sleep(delay) {
+        return new Promise(function (resolve) {
+            window.setTimeout(resolve, delay);
+        });
+    }
+
+    async function deliverFileToViewer(file) {
+        var input;
+        var handlers;
+
+        // main.js installs the actual Rotorflight loadFiles() call as a jQuery
+        // change handler. Android WebView does not reliably allow assigning a
+        // synthetic FileList to input.files, so invoke that existing handler
+        // with a real File object instead.
+        for (var attempt = 0; attempt < 40; attempt++) {
+            input = document.querySelector("input.file-open");
+            handlers = input
+                && window.jQuery
+                && typeof window.jQuery._data === "function"
+                ? window.jQuery._data(input, "events")
+                : null;
+
+            if (handlers && handlers.change && handlers.change.length) {
+                var syntheticTarget = {
+                    files: [file],
+                    value: "",
+                };
+                var syntheticEvent = {
+                    target: syntheticTarget,
+                    currentTarget: input,
+                    preventDefault: function () {},
+                    stopPropagation: function () {},
+                };
+
+                handlers.change.forEach(function (entry) {
+                    if (entry && typeof entry.handler === "function") {
+                        entry.handler.call(input, syntheticEvent);
+                    }
+                });
+                return;
+            }
+
+            await sleep(100);
+        }
+
+        throw new Error("Rotorflight log loader is not ready");
+    }
+
     window.openRotorflightSharedFile = async function (url, fileName) {
         try {
             var response = await fetch(url, { cache: "no-store" });
@@ -60,15 +108,7 @@ function installAndroidSharedFileBridge() {
                 lastModified: Date.now(),
             });
 
-            var input = document.querySelector("input.file-open");
-            if (!input) {
-                throw new Error("Blackbox file input is unavailable");
-            }
-
-            var transfer = new DataTransfer();
-            transfer.items.add(file);
-            input.files = transfer.files;
-            input.dispatchEvent(new Event("change", { bubbles: true }));
+            await deliverFileToViewer(file);
         } catch (error) {
             console.error("Unable to open Android-shared Blackbox log", error);
             alert("Unable to open the shared Blackbox log: " + error.message);
@@ -127,22 +167,18 @@ function notifyOutdatedVersion(releaseData) {
                 "updateNotice",
                 [versions[0].tag_name, versions[0].html_url]
             ));
-
             var dialog = $(".dialogUpdate")[0];
             $(".dialogUpdate-content").html(chrome.i18n.getMessage(
                 "updateNotice",
                 [versions[0].tag_name, versions[0].html_url]
             ));
-
             $(".dialogUpdate-closebtn").click(function () {
                 dialog.close();
             });
-
             $(".dialogUpdate-websitebtn").click(function () {
                 dialog.close();
                 window.open(versions[0].html_url);
             });
-
             dialog.showModal();
         }
     });
@@ -158,7 +194,6 @@ function openLinksInExternalBrowserByDefault() {
     try {
         var gui = require("nw.gui");
         var win = gui.Window.get();
-
         win.on("new-win-policy", function (frame, url, policy) {
             policy.ignore();
             gui.Shell.openExternal(url);
