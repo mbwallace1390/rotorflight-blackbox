@@ -21,6 +21,9 @@ The MVP currently provides:
 The desktop-only NW.js update dialog, secondary-window button, and export buttons
 are disabled in the Android shell for now.
 
+Android test APK builds use one pull-request-scoped signing cache. Consecutive
+builds must restore the same certificate before an APK is distributed for testing.
+
 ## Requirements
 
 - Android Studio with JDK 17
