@@ -55,38 +55,34 @@ function installAndroidSharedFileBridge() {
 
     async function deliverFileToViewer(file) {
         var input;
-        var handlers;
 
-        // main.js installs the actual Rotorflight loadFiles() call as a jQuery
-        // change handler. Android WebView does not reliably allow assigning a
-        // synthetic FileList to input.files, so invoke that existing handler
-        // with a real File object instead.
-        for (var attempt = 0; attempt < 40; attempt++) {
+        // main.js registers the normal Rotorflight file-input change handler.
+        // Android WebView rejects DataTransfer-based FileList assignment, so
+        // temporarily expose the real cached File through the input's files
+        // property and dispatch an ordinary change event.
+        for (var attempt = 0; attempt < 60; attempt++) {
             input = document.querySelector("input.file-open");
-            handlers = input
-                && window.jQuery
-                && typeof window.jQuery._data === "function"
-                ? window.jQuery._data(input, "events")
-                : null;
 
-            if (handlers && handlers.change && handlers.change.length) {
-                var syntheticTarget = {
-                    files: [file],
-                    value: "",
-                };
-                var syntheticEvent = {
-                    target: syntheticTarget,
-                    currentTarget: input,
-                    preventDefault: function () {},
-                    stopPropagation: function () {},
-                };
+            if (input && window.blackboxLogViewer && document.readyState !== "loading") {
+                try {
+                    Object.defineProperty(input, "files", {
+                        configurable: true,
+                        get: function () {
+                            return [file];
+                        },
+                    });
 
-                handlers.change.forEach(function (entry) {
-                    if (entry && typeof entry.handler === "function") {
-                        entry.handler.call(input, syntheticEvent);
+                    input.dispatchEvent(new Event("change", { bubbles: true }));
+                    delete input.files;
+                    return;
+                } catch (error) {
+                    try {
+                        delete input.files;
+                    } catch (cleanupError) {
+                        console.warn("Unable to restore Android file input", cleanupError);
                     }
-                });
-                return;
+                    throw error;
+                }
             }
 
             await sleep(100);
