@@ -148,13 +148,15 @@ html.platform-android.android-control-open body {
     box-shadow: none !important;
 }
 
+/* Desktop Blackbox conditionally hides some menu rows. Once a menu is moved
+ * into an Android sheet, reveal every row so the mobile menu stays complete. */
 .android-dropdown-menu-active > li {
-    display: block;
+    display: block !important;
     width: 100%;
 }
 
 .android-dropdown-menu-active > li > a {
-    display: block;
+    display: block !important;
     min-height: 48px;
     padding: 12px 14px;
     color: #222 !important;
@@ -162,6 +164,26 @@ html.platform-android.android-control-open body {
     line-height: 24px;
     white-space: normal;
     border-radius: 8px;
+}
+
+html.platform-android .android-dropdown-menu-active a.view-video,
+html.platform-android .android-dropdown-menu-active a.view-analyser {
+    display: block !important;
+    visibility: visible !important;
+}
+
+/* Video is a valid View option, but it cannot affect a log-only session until
+ * a video has also been opened. Keep it visible and explain that state. */
+html.platform-android:not(.has-video) .android-dropdown-menu-active a.view-video {
+    color: #888 !important;
+    opacity: 0.6;
+    pointer-events: none !important;
+}
+
+html.platform-android:not(.has-video) .android-dropdown-menu-active a.view-video::after {
+    content: "  (load video first)";
+    font-size: 14px;
+    font-weight: normal;
 }
 
 .android-dropdown-menu-active > li > a:active,
