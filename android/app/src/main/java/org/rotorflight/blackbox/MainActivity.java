@@ -393,23 +393,18 @@ public final class MainActivity extends Activity {
             }
         }
 
-        if (!selectedUris.isEmpty()) {
-            Uri firstUri = selectedUris.get(0);
-            String firstName = resolveDisplayName(firstUri);
-            if (isBlackboxLogName(firstName)) {
-                // Route logs through the same cache-backed import used by the
-                // Configurator handoff. This remains reliable even if WebView's
-                // file chooser callback is lost or returns an unreadable URI.
-                importSharedLog(firstUri);
-                if (callback != null) {
-                    callback.onReceiveValue(null);
-                }
-                return;
-            }
+        if (callback != null) {
+            // This is Blackbox's own WebView file input. Return the selected
+            // document directly so WebView creates a genuine FileList and
+            // fires Rotorflight's existing change/loadFiles path normally.
+            callback.onReceiveValue(results);
+            return;
         }
 
-        if (callback != null) {
-            callback.onReceiveValue(results);
+        if (!selectedUris.isEmpty()) {
+            // The Activity survived but its WebView callback did not. Preserve
+            // the lifecycle-independent cache import as a fallback only.
+            importSharedLog(selectedUris.get(0));
         }
     }
 
