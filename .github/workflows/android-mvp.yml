@@ -12,17 +12,13 @@ on:
       - "js/localization.js"
       - "js/pref_storage.js"
       - ".github/workflows/android-mvp.yml"
-  pull_request:
-    paths:
-      - "android/**"
-      - "css/android.css"
-      - "index.js"
-      - "js/localization.js"
-      - "js/pref_storage.js"
-      - ".github/workflows/android-mvp.yml"
 
 permissions:
   contents: read
+
+concurrency:
+  group: rotorflight-blackbox-android-signing
+  cancel-in-progress: false
 
 jobs:
   build-debug-apk:
@@ -52,13 +48,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore Android debug signing key
+      - name: Restore Android test signing key
+        id: signing-key-cache
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
-          key: rotorflight-blackbox-android-debug-signing-v1
+          key: rotorflight-blackbox-android-debug-signing-v2
 
-      - name: Create Android debug signing key
+      - name: Create Android test signing key
         shell: bash
         run: |
           mkdir -p "$HOME/.android"
@@ -73,10 +70,10 @@ jobs:
               -keysize 2048 \
               -validity 10000
           fi
-          keytool -list \
+          keytool -list -v \
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android \
-            -alias androiddebugkey
+            -alias androiddebugkey | tee android-signing-certificate.txt
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -97,12 +94,14 @@ jobs:
           set -o pipefail
           gradle -p android assembleDebug --stacktrace 2>&1 | tee android-build.log
 
-      - name: Upload Android build log
+      - name: Upload Android build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rotorflight-blackbox-android-build-log
-          path: android-build.log
+          path: |
+            android-build.log
+            android-signing-certificate.txt
           if-no-files-found: error
 
       - name: Upload debug APK
