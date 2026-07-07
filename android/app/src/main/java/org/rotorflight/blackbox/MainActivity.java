@@ -23,13 +23,13 @@ import androidx.webkit.WebViewClientCompat;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,6 +46,9 @@ public final class MainActivity extends Activity {
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + LOCAL_HOST + "/assets/index.html";
     private static final String SHARED_LOG_URL = "https://" + LOCAL_HOST + "/shared/current";
+    private static final String LOAD_FILES_EXPORT_MARKER = "    function loadLogFile(file) {";
+    private static final String LOAD_FILES_EXPORT =
+        "    window.RotorflightBlackboxOpenFiles = loadFiles;\n\n";
 
     private static final String ANDROID_MAIN_SCRIPT_SHIM =
         "if (navigator.userAgent.indexOf('RotorflightBlackboxAndroid/') !== -1) {\n"
@@ -467,12 +470,26 @@ public final class MainActivity extends Activity {
                 return delegate.handle(path);
             }
 
-            try {
-                InputStream shim = new ByteArrayInputStream(
-                    ANDROID_MAIN_SCRIPT_SHIM.getBytes(StandardCharsets.UTF_8)
+            try (InputStream original = getAssets().open("js/main.js")) {
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                byte[] buffer = new byte[32 * 1024];
+                int count;
+                while ((count = original.read(buffer)) != -1) {
+                    output.write(buffer, 0, count);
+                }
+
+                String source = new String(output.toByteArray(), StandardCharsets.UTF_8);
+                if (!source.contains(LOAD_FILES_EXPORT_MARKER)) {
+                    return delegate.handle(path);
+                }
+
+                source = source.replace(
+                    LOAD_FILES_EXPORT_MARKER,
+                    LOAD_FILES_EXPORT + LOAD_FILES_EXPORT_MARKER
                 );
-                InputStream original = getAssets().open("js/main.js");
-                InputStream combined = new SequenceInputStream(shim, original);
+
+                byte[] patchedScript = (ANDROID_MAIN_SCRIPT_SHIM + source)
+                    .getBytes(StandardCharsets.UTF_8);
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Cache-Control", "no-store");
                 return new WebResourceResponse(
@@ -481,7 +498,7 @@ public final class MainActivity extends Activity {
                     200,
                     "OK",
                     headers,
-                    combined
+                    new ByteArrayInputStream(patchedScript)
                 );
             } catch (IOException error) {
                 return delegate.handle(path);
