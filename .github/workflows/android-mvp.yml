@@ -1,5 +1,7 @@
 name: Android MVP
 
+# The Android artifact workflow runs only for branch pushes so one job owns the
+# development signing cache and every test APK keeps the same certificate.
 on:
   workflow_dispatch:
   push:
