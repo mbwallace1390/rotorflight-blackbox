@@ -1,6 +1,50 @@
 "use strict";
 
 /**
+ * The viewer still contains a few NW.js startup hooks in main.js. Native web
+ * containers such as Android WebView do not provide require("nw.gui"), so give
+ * those startup hooks a deliberately small no-op implementation. Desktop NW.js
+ * keeps using its real require function.
+ */
+(function installNwGuiFallback() {
+    if (typeof window.require === "function") {
+        return;
+    }
+
+    var app = {
+        argv: [],
+        on: function () {
+            // File-association events are supplied by NW.js only.
+        },
+    };
+
+    window.require = function (moduleName) {
+        if (moduleName !== "nw.gui") {
+            throw new Error("Unsupported desktop module: " + moduleName);
+        }
+
+        return {
+            App: app,
+            Window: {
+                get: function () {
+                    return {
+                        on: function () {},
+                    };
+                },
+                open: function () {
+                    throw new Error("Secondary windows are unavailable on this platform");
+                },
+            },
+            Shell: {
+                openExternal: function (url) {
+                    window.location.href = url;
+                },
+            },
+        };
+    };
+})();
+
+/**
  * A local key/value store for JSON-encodable values. Supports localStorage and chrome.storage.local backends.
  *
  * Supply keyPrefix if you want it automatically prepended to key names.
@@ -54,7 +98,6 @@ function PrefStorage(keyPrefix) {
                     data = {};
 
                 data[name] = value;
-
                 chrome.storage.local.set(data);
             break;
         }
