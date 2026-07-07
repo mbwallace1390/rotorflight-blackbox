@@ -1,7 +1,7 @@
 name: Android MVP
 
 # Serialize Android artifact builds so only one job can create or save the
-# development signing key at a time.
+# development signing key at a time. Verification pass: 2.
 on:
   workflow_dispatch:
   push:
