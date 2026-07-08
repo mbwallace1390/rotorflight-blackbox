@@ -5,6 +5,18 @@
         return;
     }
 
+    var viewport = document.querySelector('meta[name="viewport"]');
+    if (viewport) {
+        viewport.setAttribute("content", "width=device-width, initial-scale=1, viewport-fit=cover");
+    }
+
+    if (!document.querySelector('link[href="css/android_edge_to_edge.css"]')) {
+        var edgeStylesheet = document.createElement("link");
+        edgeStylesheet.rel = "stylesheet";
+        edgeStylesheet.href = "css/android_edge_to_edge.css";
+        document.head.appendChild(edgeStylesheet);
+    }
+
     var activeSheet = null;
 
     function findSelect(target) {
