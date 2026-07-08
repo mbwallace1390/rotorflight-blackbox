@@ -1,0 +1,125 @@
+/* Samsung device fixes, loaded with a versioned URL to bypass stale WebView CSS. */
+
+html.platform-android {
+    --android-safe-top: 32px !important;
+    --android-safe-right: 0px !important;
+    --android-safe-bottom: 48px !important;
+    --android-safe-left: 0px !important;
+}
+
+@media (orientation: landscape) {
+    html.platform-android {
+        --android-safe-top: 24px !important;
+        --android-safe-right: 52px !important;
+        --android-safe-bottom: 0px !important;
+        --android-safe-left: 0px !important;
+    }
+}
+
+/* The Rotorflight logo is absolutely positioned, so parent padding alone does
+ * not move it below the status bar. Move the actual header children instead. */
+html.platform-android .navbar-static-top {
+    height: calc(50px + var(--android-safe-top)) !important;
+    min-height: calc(50px + var(--android-safe-top)) !important;
+}
+
+html.platform-android .header-pane {
+    height: calc(50px + var(--android-safe-top)) !important;
+    min-height: calc(50px + var(--android-safe-top)) !important;
+    padding-top: 0 !important;
+    padding-right: calc(15px + var(--android-safe-right)) !important;
+    padding-left: calc(15px + var(--android-safe-left)) !important;
+}
+
+html.platform-android .navbar-header {
+    width: 100%;
+    min-height: calc(50px + var(--android-safe-top)) !important;
+}
+
+html.platform-android .navbar-logo {
+    top: var(--android-safe-top) !important;
+}
+
+html.platform-android .navbar-toggle {
+    margin-top: calc(8px + var(--android-safe-top)) !important;
+    margin-right: var(--android-safe-right) !important;
+}
+
+html.platform-android .navbar-logo .log-filename {
+    max-width: calc(100vw - 245px - var(--android-safe-left) - var(--android-safe-right)) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+html.platform-android.has-video .video-top-controls,
+html.platform-android.has-log .video-top-controls {
+    top: calc(50px + var(--android-safe-top)) !important;
+    right: var(--android-safe-right) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+}
+
+html.platform-android.has-video .graph-row,
+html.platform-android.has-log .graph-row {
+    right: var(--android-safe-right) !important;
+    bottom: calc(80px + var(--android-safe-bottom)) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+}
+
+html.platform-android.has-video .log-seek-bar,
+html.platform-android.has-log .log-seek-bar {
+    right: var(--android-safe-right) !important;
+    bottom: calc(20px + var(--android-safe-bottom)) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+}
+
+/* The old rule increased the status bar's height but left it at bottom:0,
+ * which kept the text underneath Android's navigation buttons. */
+html.platform-android #status-bar {
+    right: var(--android-safe-right) !important;
+    bottom: var(--android-safe-bottom) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+    height: 20px !important;
+    padding: 0 10px !important;
+}
+
+/* Make the small analyser readable instead of blending into the gyro graph. */
+html.platform-android #analyser:not(.android-analyser-fullscreen) {
+    overflow: hidden !important;
+    background: rgba(0, 0, 0, 0.92) !important;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* The toggle is a real child of the analyser toolbar. */
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
+    position: static !important;
+    z-index: 45 !important;
+    pointer-events: auto !important;
+}
+
+@media (orientation: portrait) {
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+        grid-template-columns: minmax(0, 1fr) 46px !important;
+        grid-template-areas:
+            "spectrum resize"
+            "filter resize"
+            "scale scale" !important;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
+        grid-area: scale !important;
+        width: 100% !important;
+        min-height: 40px !important;
+    }
+}
+
+@media (orientation: landscape) {
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) auto 46px !important;
+    }
+}
