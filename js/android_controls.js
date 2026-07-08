@@ -5,17 +5,33 @@
         return;
     }
 
+    var ANDROID_STYLE_VERSION = "95";
+
     var viewport = document.querySelector('meta[name="viewport"]');
     if (viewport) {
         viewport.setAttribute("content", "width=device-width, initial-scale=1, viewport-fit=cover");
     }
 
-    if (!document.querySelector('link[href="css/android_edge_to_edge.css"]')) {
-        var edgeStylesheet = document.createElement("link");
-        edgeStylesheet.rel = "stylesheet";
-        edgeStylesheet.href = "css/android_edge_to_edge.css";
-        document.head.appendChild(edgeStylesheet);
+    function appendFreshStylesheet(path, id) {
+        var old = document.getElementById(id);
+        if (old) {
+            old.remove();
+        }
+
+        var stylesheet = document.createElement("link");
+        stylesheet.id = id;
+        stylesheet.rel = "stylesheet";
+        stylesheet.href = path + "?v=" + ANDROID_STYLE_VERSION;
+        document.head.appendChild(stylesheet);
     }
+
+    /* Re-load Android styles with versioned URLs. Android System WebView can
+     * otherwise retain CSS from the previously installed APK. */
+    appendFreshStylesheet("css/android.css", "android-css-fresh");
+    appendFreshStylesheet("css/android_controls.css", "android-controls-css-fresh");
+    appendFreshStylesheet("css/android_analyser.css", "android-analyser-css-fresh");
+    appendFreshStylesheet("css/android_edge_to_edge.css", "android-edge-css-fresh");
+    appendFreshStylesheet("css/android_device_fixes_v95.css", "android-device-fixes-css");
 
     var activeSheet = null;
 
@@ -158,6 +174,7 @@
     function installAnalyserControlToggle() {
         var analyser = document.getElementById("analyser");
         var toolbar = document.getElementById("spectrumToolbar");
+        var resize = document.getElementById("analyserResize");
         var scalePanel = document.getElementById("androidAnalyserScalePanel");
 
         if (!analyser || !scalePanel) {
@@ -179,8 +196,15 @@
             });
         }
 
-        if (toolbar && toggle.parentNode !== toolbar) {
-            toolbar.appendChild(toggle);
+        /* Keep Scale controls inside the analyser toolbar and immediately
+         * before the expand/collapse button. This also fixes an existing
+         * button that was created under #analyser by graph_spectrum.js. */
+        if (toolbar) {
+            if (resize && toggle.nextSibling !== resize) {
+                toolbar.insertBefore(toggle, resize);
+            } else if (!resize && toggle.parentNode !== toolbar) {
+                toolbar.appendChild(toggle);
+            }
         }
 
         var fullscreen = analyser.classList.contains("android-analyser-fullscreen");
@@ -217,6 +241,8 @@
 
     function watchAnalyserControls() {
         installAnalyserControlToggle();
+        window.setTimeout(installAnalyserControlToggle, 50);
+        window.setTimeout(installAnalyserControlToggle, 250);
 
         var observer = new MutationObserver(function () {
             installAnalyserControlToggle();
