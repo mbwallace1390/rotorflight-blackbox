@@ -7,8 +7,9 @@ on:
   pull_request:
     paths:
       - "android/**"
-      - "css/android.css"
+      - "css/android*.css"
       - "index.js"
+      - "js/graph_spectrum.js"
       - "js/localization.js"
       - "js/pref_storage.js"
       - ".github/workflows/android-mvp.yml"
