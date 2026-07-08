@@ -157,6 +157,7 @@
 
     function installAnalyserControlToggle() {
         var analyser = document.getElementById("analyser");
+        var toolbar = document.getElementById("spectrumToolbar");
         var scalePanel = document.getElementById("androidAnalyserScalePanel");
 
         if (!analyser || !scalePanel) {
@@ -176,6 +177,10 @@
                 event.stopPropagation();
                 setAnalyserScaleCollapsed(analyser, toggle, !analyser.classList.contains("android-analyser-scale-collapsed"));
             });
+        }
+
+        if (toolbar && toggle.parentNode !== toolbar) {
+            toolbar.appendChild(toggle);
         }
 
         var fullscreen = analyser.classList.contains("android-analyser-fullscreen");
