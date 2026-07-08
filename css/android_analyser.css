@@ -1,0 +1,186 @@
+/* Android-only spectrum analyser controls and scaling layout. */
+
+html.platform-android .tooltip {
+    display: none !important;
+}
+
+html.platform-android .analyser #spectrumToolbar {
+    position: absolute;
+    z-index: 30;
+    pointer-events: auto;
+}
+
+html.platform-android .analyser #spectrumType,
+html.platform-android .analyser #overdrawSpectrumType,
+html.platform-android .analyser #analyserResize {
+    float: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+}
+
+html.platform-android:not(.has-analyser-fullscreen) .analyser #spectrumType,
+html.platform-android:not(.has-analyser-fullscreen) .analyser #overdrawSpectrumType,
+html.platform-android:not(.has-analyser-fullscreen) #androidAnalyserScalePanel {
+    display: none !important;
+}
+
+html.platform-android:not(.has-analyser-fullscreen) .analyser #spectrumToolbar {
+    top: 4px;
+    right: 4px;
+    left: auto;
+}
+
+html.platform-android:not(.has-analyser-fullscreen) .analyser #analyserResize {
+    position: static !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px !important;
+    color: #fff;
+    font-size: 22px;
+    background: rgba(30, 30, 30, 0.82);
+    border-radius: 10px;
+}
+
+html.platform-android.has-analyser-fullscreen .analyser #spectrumToolbar {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) 48px;
+    gap: 8px;
+    align-items: center;
+    padding: 7px;
+    background: rgba(20, 20, 20, 0.78);
+    border-radius: 10px;
+}
+
+html.platform-android.has-analyser-fullscreen .analyser #spectrumType,
+html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType,
+html.platform-android.has-analyser-fullscreen .analyser #analyserResize {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    display: block !important;
+    width: 100%;
+}
+
+html.platform-android.has-analyser-fullscreen .analyser #spectrumType select,
+html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType select {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 10px;
+    font-size: 16px;
+}
+
+html.platform-android.has-analyser-fullscreen .analyser #analyserResize {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    height: 44px !important;
+    color: #fff;
+    font-size: 22px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+}
+
+html.platform-android .analyser input#analyserZoomX,
+html.platform-android .analyser input#analyserZoomY {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-appearance: auto !important;
+    appearance: auto !important;
+}
+
+#androidAnalyserScalePanel {
+    display: none;
+}
+
+html.platform-android.has-analyser-fullscreen #androidAnalyserScalePanel {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+    padding: 9px;
+    color: #fff;
+    background: rgba(20, 20, 20, 0.82);
+    border-radius: 10px;
+}
+
+.android-analyser-scale-control {
+    display: grid;
+    grid-template-columns: auto minmax(90px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    margin: 0;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.android-analyser-scale-control output {
+    min-width: 48px;
+    color: #fff;
+    font-size: 14px;
+    text-align: right;
+}
+
+#androidAnalyserAutoScale {
+    min-height: 44px;
+    padding: 8px 14px;
+    color: #222;
+    font-size: 16px;
+    font-weight: 600;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+}
+
+#androidAnalyserScalePanel.pid-error-mode .android-analyser-scale-control:nth-child(2),
+#androidAnalyserScalePanel.pid-error-mode #androidAnalyserAutoScale {
+    display: none;
+}
+
+@media (orientation: portrait), (max-width: 760px) {
+    html.platform-android.has-analyser-fullscreen .analyser #spectrumToolbar {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) 44px;
+        gap: 5px;
+        padding: 5px;
+    }
+
+    html.platform-android.has-analyser-fullscreen .analyser #spectrumType select,
+    html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType select {
+        padding-right: 4px;
+        padding-left: 6px;
+        font-size: 14px;
+    }
+
+    html.platform-android.has-analyser-fullscreen #androidAnalyserScalePanel {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .android-analyser-scale-control {
+        grid-template-columns: 94px minmax(0, 1fr) 48px;
+    }
+
+    #androidAnalyserAutoScale {
+        width: 100%;
+    }
+}
