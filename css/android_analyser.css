@@ -160,6 +160,7 @@ html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScal
     color: #222;
     font-size: 16px;
     font-weight: 600;
+    white-space: nowrap;
     background: #fff;
     border: 1px solid #bbb;
     border-radius: 8px;
@@ -170,7 +171,7 @@ html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScal
     display: none;
 }
 
-@media (orientation: portrait), (max-width: 760px) {
+@media (orientation: portrait) {
     html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
         grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr) 44px;
         gap: 5px;
@@ -195,5 +196,30 @@ html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScal
 
     #androidAnalyserAutoScale {
         width: 100%;
+    }
+}
+
+@media (orientation: landscape) {
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+        gap: 8px;
+        padding: 6px 8px;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen .android-analyser-scale-control {
+        grid-template-columns: auto minmax(70px, 1fr) 44px;
+        gap: 6px;
+        font-size: 12px;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen .android-analyser-scale-control output {
+        min-width: 44px;
+        font-size: 12px;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserAutoScale {
+        min-height: 38px;
+        padding: 6px 12px;
+        font-size: 14px;
     }
 }
