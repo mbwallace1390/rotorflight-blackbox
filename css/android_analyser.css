@@ -4,47 +4,60 @@ html.platform-android .tooltip {
     display: none !important;
 }
 
-html.platform-android .analyser #spectrumToolbar {
+html.platform-android #analyser {
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+html.platform-android #analyser #analyserCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+html.platform-android #analyser #spectrumToolbar {
     position: absolute;
     z-index: 30;
     pointer-events: auto;
 }
 
-html.platform-android .analyser #spectrumType,
-html.platform-android .analyser #overdrawSpectrumType,
-html.platform-android .analyser #analyserResize {
+html.platform-android #analyser #spectrumType,
+html.platform-android #analyser #overdrawSpectrumType,
+html.platform-android #analyser #analyserResize {
     float: none !important;
     height: auto !important;
     overflow: visible !important;
     opacity: 1 !important;
 }
 
-html.platform-android:not(.has-analyser-fullscreen) .analyser #spectrumType,
-html.platform-android:not(.has-analyser-fullscreen) .analyser #overdrawSpectrumType,
-html.platform-android:not(.has-analyser-fullscreen) #androidAnalyserScalePanel {
+html.platform-android #analyser:not(.android-analyser-fullscreen) #spectrumType,
+html.platform-android #analyser:not(.android-analyser-fullscreen) #overdrawSpectrumType,
+html.platform-android #analyser:not(.android-analyser-fullscreen) #androidAnalyserScalePanel {
     display: none !important;
 }
 
-html.platform-android:not(.has-analyser-fullscreen) .analyser #spectrumToolbar {
-    top: 4px;
-    right: 4px;
+html.platform-android #analyser:not(.android-analyser-fullscreen) #spectrumToolbar {
+    top: 6px;
+    right: 6px;
     left: auto;
+    display: block;
 }
 
-html.platform-android:not(.has-analyser-fullscreen) .analyser #analyserResize {
+html.platform-android #analyser:not(.android-analyser-fullscreen) #analyserResize {
     position: static !important;
     display: flex !important;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px !important;
+    width: 46px;
+    height: 46px !important;
     color: #fff;
     font-size: 22px;
-    background: rgba(30, 30, 30, 0.82);
+    background: rgba(30, 30, 30, 0.84);
     border-radius: 10px;
 }
 
-html.platform-android.has-analyser-fullscreen .analyser #spectrumToolbar {
+html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
     top: 8px;
     right: 8px;
     left: 8px;
@@ -53,13 +66,13 @@ html.platform-android.has-analyser-fullscreen .analyser #spectrumToolbar {
     gap: 8px;
     align-items: center;
     padding: 7px;
-    background: rgba(20, 20, 20, 0.78);
+    background: rgba(20, 20, 20, 0.82);
     border-radius: 10px;
 }
 
-html.platform-android.has-analyser-fullscreen .analyser #spectrumType,
-html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType,
-html.platform-android.has-analyser-fullscreen .analyser #analyserResize {
+html.platform-android #analyser.android-analyser-fullscreen #spectrumType,
+html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType,
+html.platform-android #analyser.android-analyser-fullscreen #analyserResize {
     position: static !important;
     top: auto !important;
     right: auto !important;
@@ -68,8 +81,8 @@ html.platform-android.has-analyser-fullscreen .analyser #analyserResize {
     width: 100%;
 }
 
-html.platform-android.has-analyser-fullscreen .analyser #spectrumType select,
-html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType select {
+html.platform-android #analyser.android-analyser-fullscreen #spectrumType select,
+html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType select {
     width: 100%;
     min-width: 0;
     min-height: 44px;
@@ -77,19 +90,19 @@ html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType se
     font-size: 16px;
 }
 
-html.platform-android.has-analyser-fullscreen .analyser #analyserResize {
+html.platform-android #analyser.android-analyser-fullscreen #analyserResize {
     display: flex !important;
     align-items: center;
     justify-content: center;
     height: 44px !important;
     color: #fff;
     font-size: 22px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.14);
     border-radius: 8px;
 }
 
-html.platform-android .analyser input#analyserZoomX,
-html.platform-android .analyser input#analyserZoomY {
+html.platform-android #analyser input#analyserZoomX,
+html.platform-android #analyser input#analyserZoomY {
     position: static !important;
     top: auto !important;
     right: auto !important;
@@ -107,7 +120,7 @@ html.platform-android .analyser input#analyserZoomY {
     display: none;
 }
 
-html.platform-android.has-analyser-fullscreen #androidAnalyserScalePanel {
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
     position: absolute;
     right: 8px;
     bottom: 8px;
@@ -119,7 +132,7 @@ html.platform-android.has-analyser-fullscreen #androidAnalyserScalePanel {
     align-items: end;
     padding: 9px;
     color: #fff;
-    background: rgba(20, 20, 20, 0.82);
+    background: rgba(20, 20, 20, 0.84);
     border-radius: 10px;
 }
 
@@ -158,20 +171,20 @@ html.platform-android.has-analyser-fullscreen #androidAnalyserScalePanel {
 }
 
 @media (orientation: portrait), (max-width: 760px) {
-    html.platform-android.has-analyser-fullscreen .analyser #spectrumToolbar {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) 44px;
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr) 44px;
         gap: 5px;
         padding: 5px;
     }
 
-    html.platform-android.has-analyser-fullscreen .analyser #spectrumType select,
-    html.platform-android.has-analyser-fullscreen .analyser #overdrawSpectrumType select {
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumType select,
+    html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType select {
         padding-right: 4px;
         padding-left: 6px;
         font-size: 14px;
     }
 
-    html.platform-android.has-analyser-fullscreen #androidAnalyserScalePanel {
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
         grid-template-columns: 1fr;
         gap: 6px;
     }
