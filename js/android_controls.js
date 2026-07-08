@@ -24,8 +24,14 @@
         var style = document.createElement("style");
         style.id = "android-analyser-touch-controls-style";
         style.textContent = [
-            "html.platform-android #androidAnalyserScalePanel,",
-            "html.platform-android #androidAnalyserScaleToggle { display:none !important; }",
+            "html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel,",
+            "html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle,",
+            "html.platform-android #analyser #androidAnalyserScalePanel,",
+            "html.platform-android #analyser #androidAnalyserScaleToggle {",
+            "  display:none !important; visibility:hidden !important;",
+            "  pointer-events:none !important; width:0 !important; height:0 !important;",
+            "  min-width:0 !important; min-height:0 !important; padding:0 !important; margin:0 !important;",
+            "}",
             "html.platform-android #androidAnalyserTouchControls {",
             "  display:none; position:absolute; z-index:260; pointer-events:auto;",
             "  gap:5px; padding:6px; box-sizing:border-box;",
@@ -34,11 +40,11 @@
             "}",
             "html.platform-android.has-analyser #androidAnalyserTouchControls { display:flex; }",
             "html.platform-android.has-analyser:not(.has-analyser-fullscreen) #androidAnalyserTouchControls {",
-            "  right:8px; bottom:8px; flex-direction:row; align-items:center;",
+            "  right:8px; bottom:24px; flex-direction:row; align-items:center;",
             "  transform:scale(.82); transform-origin:bottom right;",
             "}",
             "html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls {",
-            "  position:fixed; right:12px; bottom:calc(96px + env(safe-area-inset-bottom));",
+            "  position:fixed; right:12px; bottom:calc(140px + env(safe-area-inset-bottom));",
             "  width:auto; flex-direction:row; align-items:center; transform:none;",
             "}",
             "html.platform-android #androidAnalyserTouchControls button {",
@@ -66,7 +72,7 @@
             "@media (orientation:landscape) and (max-height:500px) {",
             "  html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls {",
             "    right:calc(60px + env(safe-area-inset-right));",
-            "    bottom:12px;",
+            "    bottom:28px;",
             "  }",
             "  html.platform-android.has-analyser-fullscreen #androidAnalyserRangeStatus {",
             "    min-width:96px; text-align:left;",
@@ -77,6 +83,26 @@
             "}",
         ].join("\n");
         document.head.appendChild(style);
+
+        function hideLegacyScaleControls() {
+            var legacyPanel = document.getElementById("androidAnalyserScalePanel");
+            var legacyToggle = document.getElementById("androidAnalyserScaleToggle");
+
+            if (legacyPanel) {
+                legacyPanel.style.setProperty("display", "none", "important");
+                legacyPanel.style.setProperty("visibility", "hidden", "important");
+                legacyPanel.style.setProperty("pointer-events", "none", "important");
+                legacyPanel.setAttribute("aria-hidden", "true");
+            }
+
+            if (legacyToggle) {
+                legacyToggle.remove();
+            }
+        }
+
+        hideLegacyScaleControls();
+        window.setTimeout(hideLegacyScaleControls, 0);
+        window.setTimeout(hideLegacyScaleControls, 250);
 
         var controls = document.createElement("div");
         controls.id = "androidAnalyserTouchControls";
@@ -202,7 +228,7 @@
         updateStatus();
         document.documentElement.setAttribute(
             "data-android-controls",
-            "stable-analyser-range-101"
+            "stable-analyser-range-102"
         );
     }
 
