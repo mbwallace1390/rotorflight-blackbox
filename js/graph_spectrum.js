@@ -50,6 +50,13 @@ var
         var autoScaleButton = null;
 
         if (isAndroid) {
+            if (!document.querySelector('link[href="css/android_analyser.css"]')) {
+                var analyserStylesheet = document.createElement("link");
+                analyserStylesheet.rel = "stylesheet";
+                analyserStylesheet.href = "css/android_analyser.css";
+                document.head.appendChild(analyserStylesheet);
+            }
+
             var analyserParent = $(analyserCanvas).parent();
             analyserParent.find("#androidAnalyserScalePanel").remove();
 
