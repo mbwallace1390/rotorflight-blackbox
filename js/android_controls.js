@@ -5,7 +5,7 @@
         return;
     }
 
-    var ANDROID_STYLE_VERSION = "95";
+    var ANDROID_STYLE_VERSION = "96";
 
     var viewport = document.querySelector('meta[name="viewport"]');
     if (viewport) {
@@ -25,13 +25,11 @@
         document.head.appendChild(stylesheet);
     }
 
-    /* Re-load Android styles with versioned URLs. Android System WebView can
-     * otherwise retain CSS from the previously installed APK. */
     appendFreshStylesheet("css/android.css", "android-css-fresh");
     appendFreshStylesheet("css/android_controls.css", "android-controls-css-fresh");
     appendFreshStylesheet("css/android_analyser.css", "android-analyser-css-fresh");
     appendFreshStylesheet("css/android_edge_to_edge.css", "android-edge-css-fresh");
-    appendFreshStylesheet("css/android_device_fixes_v95.css", "android-device-fixes-css");
+    appendFreshStylesheet("css/android_device_fixes_v96.css", "android-device-fixes-css");
 
     var activeSheet = null;
 
@@ -171,10 +169,19 @@
         }
     }
 
+    function ensureQuickControls(analyser) {
+        var quickControls = document.getElementById("androidAnalyserQuickControls");
+        if (!quickControls) {
+            quickControls = document.createElement("div");
+            quickControls.id = "androidAnalyserQuickControls";
+            quickControls.setAttribute("aria-label", "Analyser controls");
+            analyser.appendChild(quickControls);
+        }
+        return quickControls;
+    }
+
     function installAnalyserControlToggle() {
         var analyser = document.getElementById("analyser");
-        var toolbar = document.getElementById("spectrumToolbar");
-        var resize = document.getElementById("analyserResize");
         var scalePanel = document.getElementById("androidAnalyserScalePanel");
 
         if (!analyser || !scalePanel) {
@@ -192,19 +199,24 @@
             toggle.addEventListener("click", function (event) {
                 event.preventDefault();
                 event.stopPropagation();
-                setAnalyserScaleCollapsed(analyser, toggle, !analyser.classList.contains("android-analyser-scale-collapsed"));
+                setAnalyserScaleCollapsed(
+                    analyser,
+                    toggle,
+                    !analyser.classList.contains("android-analyser-scale-collapsed")
+                );
             });
         }
 
-        /* Keep Scale controls inside the analyser toolbar and immediately
-         * before the expand/collapse button. This also fixes an existing
-         * button that was created under #analyser by graph_spectrum.js. */
-        if (toolbar) {
-            if (resize && toggle.nextSibling !== resize) {
-                toolbar.insertBefore(toggle, resize);
-            } else if (!resize && toggle.parentNode !== toolbar) {
-                toolbar.appendChild(toggle);
-            }
+        var resize = document.getElementById("analyserResize");
+        var quickControls = ensureQuickControls(analyser);
+
+        /* Keep both controls outside spectrumToolbar. The dropdown overlay and
+         * the Scale button now have separate stacking and layout contexts. */
+        if (resize && resize.parentNode !== quickControls) {
+            quickControls.appendChild(resize);
+        }
+        if (toggle.parentNode !== quickControls) {
+            quickControls.appendChild(toggle);
         }
 
         var fullscreen = analyser.classList.contains("android-analyser-fullscreen");
@@ -236,13 +248,14 @@
     function updateAnalyserScaleToggle(analyser, toggle) {
         var collapsed = analyser.classList.contains("android-analyser-scale-collapsed");
         toggle.setAttribute("aria-expanded", String(!collapsed));
-        toggle.textContent = collapsed ? "Scale controls" : "Hide scale";
+        toggle.textContent = collapsed ? "Scale" : "Hide";
     }
 
     function watchAnalyserControls() {
         installAnalyserControlToggle();
         window.setTimeout(installAnalyserControlToggle, 50);
         window.setTimeout(installAnalyserControlToggle, 250);
+        window.setTimeout(installAnalyserControlToggle, 750);
 
         var observer = new MutationObserver(function () {
             installAnalyserControlToggle();
