@@ -9,6 +9,7 @@ on:
       - "android/**"
       - "css/android*.css"
       - "index.js"
+      - "js/android_controls.js"
       - "js/graph_spectrum.js"
       - "js/localization.js"
       - "js/pref_storage.js"
