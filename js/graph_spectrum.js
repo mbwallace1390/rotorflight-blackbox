@@ -6,7 +6,9 @@ const
         ANALYSER_LARGE_LEFT_MARGIN    = 10,
         ANALYSER_LARGE_TOP_MARGIN     = 10,
         ANALYSER_LARGE_HEIGHT_MARGIN  = 20,
-        ANALYSER_LARGE_WIDTH_MARGIN   = 20;
+        ANALYSER_LARGE_WIDTH_MARGIN   = 20,
+        ANDROID_AUTO_SCALE_TARGET     = 0.72,
+        ANDROID_MAX_SIGNAL_GAIN       = 20000;
 
 var
     that = this,
@@ -24,6 +26,8 @@ var
 
     fftData = null,
 
+    isAndroid = Boolean(window.RotorflightPlatform && window.RotorflightPlatform.android),
+
     prefs = new PrefStorage();
 
     try {
@@ -40,6 +44,35 @@ var
         var spectrumToolbarElem = $('#spectrumToolbar');
         var spectrumTypeElem = $("#spectrumTypeSelect");
         var overdrawSpectrumTypeElem = $("#overdrawSpectrumTypeSelect");
+        var mobileScalePanel = null;
+        var analyserZoomXValueElem = null;
+        var analyserZoomYValueElem = null;
+        var autoScaleButton = null;
+
+        if (isAndroid) {
+            var analyserParent = $(analyserCanvas).parent();
+            analyserParent.find("#androidAnalyserScalePanel").remove();
+
+            analyserZoomYElem.attr({
+                max: ANDROID_MAX_SIGNAL_GAIN,
+                step: 10
+            });
+
+            mobileScalePanel = $('<div id="androidAnalyserScalePanel"></div>');
+
+            var xControl = $('<label class="android-analyser-scale-control"><span>Frequency range</span></label>');
+            analyserZoomXValueElem = $('<output>100%</output>');
+            xControl.append(analyserZoomXElem).append(analyserZoomXValueElem);
+
+            var yControl = $('<label class="android-analyser-scale-control"><span>Signal gain</span></label>');
+            analyserZoomYValueElem = $('<output>1.0×</output>');
+            yControl.append(analyserZoomYElem).append(analyserZoomYValueElem);
+
+            autoScaleButton = $('<button type="button" id="androidAnalyserAutoScale">Auto scale</button>');
+
+            mobileScalePanel.append(xControl, yControl, autoScaleButton);
+            analyserParent.append(mobileScalePanel);
+        }
 
         this.setFullscreen = function(size) {
             isFullscreen = (size==true);
@@ -66,9 +99,14 @@ var
                         top: ANALYSER_LARGE_TOP_MARGIN
                 };
             } else {
+                var analyserSize = parseInt(userSettings.analyser.size);
+                if (isAndroid) {
+                    analyserSize = Math.max(analyserSize, 45);
+                }
+
                 return {
-                    height: canvas.height * parseInt(userSettings.analyser.size) / 100.0,
-                    width: canvas.width * parseInt(userSettings.analyser.size) / 100.0,
+                    height: canvas.height * analyserSize / 100.0,
+                    width: canvas.width * analyserSize / 100.0,
                     left: (canvas.width * parseInt(userSettings.analyser.left) / 100.0),
                     top:  (canvas.height * parseInt(userSettings.analyser.top) / 100.0)
                 };
@@ -101,6 +139,67 @@ var
             });
 
         };
+
+        function updateMobileScaleLabels() {
+            if (!isAndroid) {
+                return;
+            }
+
+            analyserZoomXValueElem.text(analyserZoomXElem.val() + "%");
+            analyserZoomYValueElem.text((parseFloat(analyserZoomYElem.val()) / 100).toFixed(1) + "×");
+        }
+
+        function getVisibleSpectrumMaximum() {
+            if (!fftData) {
+                return 0;
+            }
+
+            if (userSettings.spectrumType === SPECTRUM_TYPE.FREQ_VS_THROTTLE) {
+                return Number(fftData.maxNoise) || 0;
+            }
+
+            if (userSettings.spectrumType !== SPECTRUM_TYPE.FREQUENCY || !fftData.fftOutput) {
+                return 0;
+            }
+
+            var visibleLength = Math.min(
+                fftData.fftOutput.length,
+                Math.max(1, Math.floor(fftData.fftLength / analyserZoomX))
+            );
+            var maxFrequency = fftData.blackBoxRate / 2;
+            var startIndex = Math.max(1, Math.floor(20 / maxFrequency * fftData.fftLength));
+            var maxValue = 0;
+
+            for (var index = startIndex; index < visibleLength; index++) {
+                var value = Number(fftData.fftOutput[index]);
+                if (Number.isFinite(value) && value > maxValue) {
+                    maxValue = value;
+                }
+            }
+
+            return maxValue;
+        }
+
+        function autoScaleSignal() {
+            if (!isAndroid || userSettings.spectrumType === SPECTRUM_TYPE.PIDERROR_VS_SETPOINT) {
+                return;
+            }
+
+            var maxValue = getVisibleSpectrumMaximum();
+            if (!Number.isFinite(maxValue) || maxValue <= 0) {
+                return;
+            }
+
+            var signalGain = ANDROID_AUTO_SCALE_TARGET * 10000 / maxValue;
+            signalGain = Math.round(signalGain / 10) * 10;
+            signalGain = constrain(signalGain, 10, ANDROID_MAX_SIGNAL_GAIN);
+
+            analyserZoomYElem.val(signalGain);
+            analyserZoomY = 100 / signalGain;
+            GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
+            updateMobileScaleLabels();
+            that.refresh();
+        }
 
         var dataLoad = function() {
 
@@ -140,6 +239,7 @@ var
                 dataReload = false;
                 dataLoad();
                 GraphSpectrumPlot.setData(fftData, userSettings.spectrumType);
+                autoScaleSignal();
             }
 
             that.draw(); // draw the analyser on the canvas....
@@ -171,7 +271,12 @@ var
         analyserZoomXElem.on('input', $.debounce(100, function() {
             analyserZoomX = (analyserZoomXElem.val() / 100);
             GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
-            that.refresh();
+            updateMobileScaleLabels();
+            if (isAndroid) {
+                autoScaleSignal();
+            } else {
+                that.refresh();
+            }
         })).dblclick(function() {
             $(this).val(DEFAULT_ZOOM).trigger("input");
         }).val(DEFAULT_ZOOM);;
@@ -179,10 +284,19 @@ var
         analyserZoomYElem.on('input', $.debounce(100, function() {
             analyserZoomY = 1 / (analyserZoomYElem.val() / 100);
             GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
+            updateMobileScaleLabels();
             that.refresh();
         })).dblclick(function() {
             $(this).val(DEFAULT_ZOOM).trigger("input");
         }).val(DEFAULT_ZOOM);
+
+        if (isAndroid) {
+            autoScaleButton.on("click", function(event) {
+                event.preventDefault();
+                autoScaleSignal();
+            });
+            updateMobileScaleLabels();
+        }
 
         // Spectrum type to show
         userSettings.spectrumType = userSettings.spectrumType || SPECTRUM_TYPE.FREQUENCY;
@@ -204,6 +318,9 @@ var
             const pidErrorVsSetpointSelected = optionSelected === SPECTRUM_TYPE.PIDERROR_VS_SETPOINT;
             overdrawSpectrumTypeElem.toggle(!pidErrorVsSetpointSelected);
             analyserZoomYElem.toggleClass('onlyFullScreenException', pidErrorVsSetpointSelected);
+            if (isAndroid) {
+                mobileScalePanel.toggleClass('pid-error-mode', pidErrorVsSetpointSelected);
+            }
         }).change();
 
         // Spectrum overdraw to show
