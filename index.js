@@ -29,7 +29,7 @@ function applyPlatformStyles() {
     var root = document.documentElement;
 
     if (RotorflightPlatform.android) {
-        var androidAssetVersion = "97";
+        var androidAssetVersion = "103";
         root.classList.add("platform-android");
         root.setAttribute("data-android-layout-version", androidAssetVersion);
 
@@ -43,9 +43,6 @@ function applyPlatformStyles() {
         controlsStylesheet.href = "css/android_controls.css?v=" + androidAssetVersion;
         document.head.appendChild(controlsStylesheet);
 
-        /* android_controls.js contains the analyser quick-control rail,
-         * safe-area fixes and current device-specific stylesheet loader. It
-         * was previously packaged but never loaded. */
         var controlsScript = document.createElement("script");
         controlsScript.src = "js/android_controls.js?v=" + androidAssetVersion;
         controlsScript.async = false;
