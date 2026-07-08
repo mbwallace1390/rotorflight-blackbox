@@ -1,3 +1,5 @@
+@import url("android_analyser.css");
+
 /* Android-specific layout and touch adjustments.
  * Activated by index.js when the native Android WebView user agent is detected.
  */
