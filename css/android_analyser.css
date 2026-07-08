@@ -24,7 +24,8 @@ html.platform-android #analyser #spectrumToolbar {
 
 html.platform-android #analyser #spectrumType,
 html.platform-android #analyser #overdrawSpectrumType,
-html.platform-android #analyser #analyserResize {
+html.platform-android #analyser #analyserResize,
+html.platform-android #analyser #androidAnalyserScaleToggle {
     float: none !important;
     height: auto !important;
     overflow: visible !important;
@@ -33,7 +34,8 @@ html.platform-android #analyser #analyserResize {
 
 html.platform-android #analyser:not(.android-analyser-fullscreen) #spectrumType,
 html.platform-android #analyser:not(.android-analyser-fullscreen) #overdrawSpectrumType,
-html.platform-android #analyser:not(.android-analyser-fullscreen) #androidAnalyserScalePanel {
+html.platform-android #analyser:not(.android-analyser-fullscreen) #androidAnalyserScalePanel,
+html.platform-android #analyser:not(.android-analyser-fullscreen) #androidAnalyserScaleToggle {
     display: none !important;
 }
 
@@ -62,20 +64,22 @@ html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
     right: 8px;
     left: 8px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) 48px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto 48px;
     gap: 8px;
     align-items: center;
     padding: 7px;
-    background: rgba(20, 20, 20, 0.82);
+    background: rgba(20, 20, 20, 0.84);
     border-radius: 10px;
 }
 
 html.platform-android #analyser.android-analyser-fullscreen #spectrumType,
 html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType,
-html.platform-android #analyser.android-analyser-fullscreen #analyserResize {
+html.platform-android #analyser.android-analyser-fullscreen #analyserResize,
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
     position: static !important;
     top: auto !important;
     right: auto !important;
+    bottom: auto !important;
     left: auto !important;
     display: block !important;
     width: 100%;
@@ -116,8 +120,23 @@ html.platform-android #analyser input#analyserZoomY {
     appearance: auto !important;
 }
 
-#androidAnalyserScalePanel {
+#androidAnalyserScalePanel,
+#androidAnalyserScaleToggle {
     display: none;
+}
+
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
+    min-width: 112px;
+    min-height: 44px;
+    padding: 7px 12px;
+    color: #222;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #aaa;
+    border-radius: 8px;
+    box-shadow: none;
 }
 
 html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
@@ -132,8 +151,12 @@ html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScal
     align-items: end;
     padding: 9px;
     color: #fff;
-    background: rgba(20, 20, 20, 0.84);
+    background: rgba(20, 20, 20, 0.88);
     border-radius: 10px;
+}
+
+html.platform-android #analyser.android-analyser-fullscreen.android-analyser-scale-collapsed #androidAnalyserScalePanel {
+    display: none !important;
 }
 
 .android-analyser-scale-control {
@@ -171,35 +194,20 @@ html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScal
     display: none;
 }
 
-@media (orientation: portrait) {
-    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
-        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr) 44px;
-        gap: 5px;
-        padding: 5px;
-    }
-
-    html.platform-android #analyser.android-analyser-fullscreen #spectrumType select,
-    html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType select {
-        padding-right: 4px;
-        padding-left: 6px;
-        font-size: 14px;
-    }
-
-    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
-        grid-template-columns: 1fr;
-        gap: 6px;
-    }
-
-    .android-analyser-scale-control {
-        grid-template-columns: 94px minmax(0, 1fr) 48px;
-    }
-
-    #androidAnalyserAutoScale {
-        width: 100%;
-    }
-}
-
 @media (orientation: landscape) {
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) auto 46px;
+        gap: 6px;
+        padding: 6px;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
+        min-width: 104px;
+        min-height: 40px;
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
     html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
         gap: 8px;
@@ -224,43 +232,13 @@ html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScal
     }
 }
 
-/* Fullscreen analyser scale controls can be collapsed to uncover the plot. */
-#androidAnalyserScaleToggle {
-    display: none;
-}
-
-html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    z-index: 40;
-    display: block;
-    min-height: 42px;
-    padding: 7px 14px;
-    color: #222;
-    font-size: 15px;
-    font-weight: 600;
-    white-space: nowrap;
-    background: rgba(255, 255, 255, 0.96);
-    border: 1px solid #aaa;
-    border-radius: 9px;
-    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.35);
-}
-
-html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
-    bottom: 58px;
-}
-
-html.platform-android #analyser.android-analyser-fullscreen.android-analyser-scale-collapsed #androidAnalyserScalePanel {
-    display: none !important;
-}
-
 @media (orientation: portrait) {
     html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
         grid-template-columns: minmax(0, 1fr) 46px;
         grid-template-areas:
             "spectrum resize"
-            "filter resize";
+            "filter resize"
+            "scale scale";
         gap: 5px;
         padding: 5px;
     }
@@ -271,6 +249,13 @@ html.platform-android #analyser.android-analyser-fullscreen.android-analyser-sca
 
     html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType {
         grid-area: filter;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScaleToggle {
+        grid-area: scale;
+        min-height: 40px;
+        padding: 6px 10px;
+        font-size: 14px;
     }
 
     html.platform-android #analyser.android-analyser-fullscreen #analyserResize {
@@ -315,8 +300,17 @@ html.platform-android #analyser.android-analyser-fullscreen.android-analyser-sca
     }
 
     html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserScalePanel {
-        bottom: 58px;
-        max-height: calc(100% - 180px);
+        grid-template-columns: 1fr;
+        gap: 6px;
+        max-height: calc(100% - 230px);
         overflow-y: auto;
+    }
+
+    .android-analyser-scale-control {
+        grid-template-columns: 94px minmax(0, 1fr) 48px;
+    }
+
+    #androidAnalyserAutoScale {
+        width: 100%;
     }
 }
