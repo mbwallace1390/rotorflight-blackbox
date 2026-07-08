@@ -5,7 +5,50 @@
         return;
     }
 
-    var ANDROID_STYLE_VERSION = "96";
+    function pageHasLoadedLog() {
+        var root = document.documentElement;
+        var body = document.body;
+        return root.classList.contains("has-log")
+            || root.classList.contains("has-video")
+            || (body && body.classList.contains("has-log"))
+            || (body && body.classList.contains("has-video"));
+    }
+
+    /* Do not install Android control listeners before Blackbox finishes opening
+     * a file. Loading this script during the welcome/file-picker screen caused
+     * file selections to return without entering the viewer on some WebViews. */
+    if (!pageHasLoadedLog()) {
+        if (!window.__RotorflightAndroidControlsDeferred) {
+            window.__RotorflightAndroidControlsDeferred = true;
+
+            var deferredObserver = new MutationObserver(function () {
+                if (!pageHasLoadedLog()) {
+                    return;
+                }
+
+                deferredObserver.disconnect();
+                var deferredScript = document.createElement("script");
+                deferredScript.src = "js/android_controls.js?v=98&afterLog=1";
+                deferredScript.async = false;
+                document.head.appendChild(deferredScript);
+            });
+
+            deferredObserver.observe(document.documentElement, {
+                attributes: true,
+                childList: true,
+                subtree: true,
+                attributeFilter: ["class"]
+            });
+        }
+        return;
+    }
+
+    if (window.__RotorflightAndroidControlsStarted) {
+        return;
+    }
+    window.__RotorflightAndroidControlsStarted = true;
+
+    var ANDROID_STYLE_VERSION = "98";
 
     var viewport = document.querySelector('meta[name="viewport"]');
     if (viewport) {
@@ -210,8 +253,6 @@
         var resize = document.getElementById("analyserResize");
         var quickControls = ensureQuickControls(analyser);
 
-        /* Keep both controls outside spectrumToolbar. The dropdown overlay and
-         * the Scale button now have separate stacking and layout contexts. */
         if (resize && resize.parentNode !== quickControls) {
             quickControls.appendChild(resize);
         }
