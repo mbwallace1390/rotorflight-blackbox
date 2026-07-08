@@ -47,6 +47,13 @@
             "  position:fixed; right:12px; bottom:calc(140px + env(safe-area-inset-bottom));",
             "  width:auto; flex-direction:row; align-items:center; transform:none;",
             "}",
+            "html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls .android-analyser-range-control,",
+            "html.platform-android.has-analyser-fullscreen #androidAnalyserRangeStatus {",
+            "  display:none !important;",
+            "}",
+            "html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls {",
+            "  padding:5px;",
+            "}",
             "html.platform-android #androidAnalyserTouchControls button {",
             "  min-width:54px; min-height:44px; padding:7px 9px;",
             "  color:#222; background:#fff; border:1px solid #aaa;",
@@ -73,9 +80,6 @@
             "  html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls {",
             "    right:calc(60px + env(safe-area-inset-right));",
             "    bottom:28px;",
-            "  }",
-            "  html.platform-android.has-analyser-fullscreen #androidAnalyserRangeStatus {",
-            "    min-width:96px; text-align:left;",
             "  }",
             "  html.platform-android #androidGraphPanelClose {",
             "    top:8px; right:calc(10px + env(safe-area-inset-right));",
@@ -110,16 +114,19 @@
 
         var autoButton = document.createElement("button");
         autoButton.type = "button";
+        autoButton.className = "android-analyser-auto-control";
         autoButton.textContent = "Auto";
         autoButton.title = "Automatically scale the analyser signal";
 
         var inButton = document.createElement("button");
         inButton.type = "button";
+        inButton.className = "android-analyser-range-control";
         inButton.textContent = "Set I";
         inButton.title = "Set analyser range start at the red cursor";
 
         var outButton = document.createElement("button");
         outButton.type = "button";
+        outButton.className = "android-analyser-range-control";
         outButton.textContent = "Set O";
         outButton.title = "Set analyser range end at the red cursor";
 
@@ -198,7 +205,7 @@
                     autoButton.textContent = "Auto";
                 }, 700);
             } else {
-                autoButton.textContent = "Open analyser";
+                autoButton.textContent = "Unavailable";
                 window.setTimeout(function () {
                     autoButton.textContent = "Auto";
                 }, 900);
@@ -228,7 +235,7 @@
         updateStatus();
         document.documentElement.setAttribute(
             "data-android-controls",
-            "stable-analyser-range-102"
+            "stable-analyser-range-103"
         );
     }
 
