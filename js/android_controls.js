@@ -1,10 +1,10 @@
 "use strict";
 
-/* Stable Android analyser touch controls.
+/* Stable Android analyser and graph-panel touch controls.
  *
  * This intentionally avoids mutation observers, global touch interception,
- * dropdown replacement and resize listeners. It only creates one small
- * analyser panel and handles clicks on its own buttons.
+ * dropdown replacement and resize listeners. It only creates isolated
+ * controls and handles clicks on those controls.
  */
 (function () {
     if (!window.RotorflightPlatform || !window.RotorflightPlatform.android) {
@@ -27,22 +27,22 @@
             "html.platform-android #androidAnalyserScalePanel,",
             "html.platform-android #androidAnalyserScaleToggle { display:none !important; }",
             "html.platform-android #androidAnalyserTouchControls {",
-            "  display:none; position:absolute; z-index:60; pointer-events:auto;",
+            "  display:none; position:absolute; z-index:260; pointer-events:auto;",
             "  gap:5px; padding:6px; box-sizing:border-box;",
-            "  background:rgba(20,20,20,.90); border:1px solid rgba(255,255,255,.18);",
-            "  border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.45);",
+            "  background:rgba(20,20,20,.92); border:1px solid rgba(255,255,255,.22);",
+            "  border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.55);",
             "}",
             "html.platform-android.has-analyser #androidAnalyserTouchControls { display:flex; }",
             "html.platform-android.has-analyser:not(.has-analyser-fullscreen) #androidAnalyserTouchControls {",
-            "  right:6px; bottom:6px; flex-direction:row; align-items:center;",
+            "  right:8px; bottom:8px; flex-direction:row; align-items:center;",
             "  transform:scale(.82); transform-origin:bottom right;",
             "}",
             "html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls {",
-            "  right:10px; top:50%; width:94px; flex-direction:column;",
-            "  transform:translateY(-50%);",
+            "  position:fixed; right:12px; bottom:calc(96px + env(safe-area-inset-bottom));",
+            "  width:auto; flex-direction:row; align-items:center; transform:none;",
             "}",
             "html.platform-android #androidAnalyserTouchControls button {",
-            "  min-width:48px; min-height:42px; padding:7px 9px;",
+            "  min-width:54px; min-height:44px; padding:7px 9px;",
             "  color:#222; background:#fff; border:1px solid #aaa;",
             "  border-radius:7px; font-size:14px; font-weight:700; line-height:1.1;",
             "}",
@@ -51,17 +51,28 @@
             "  background:#d8ecff; border-color:#4388c7;",
             "}",
             "html.platform-android #androidAnalyserRangeStatus {",
-            "  min-width:70px; padding:3px 2px; color:#fff;",
+            "  min-width:76px; padding:3px 2px; color:#fff;",
             "  font-size:11px; line-height:1.35; text-align:center; white-space:nowrap;",
             "}",
             "html.platform-android.has-analyser:not(.has-analyser-fullscreen) #androidAnalyserRangeStatus { display:none; }",
+            "html.platform-android #androidGraphPanelClose {",
+            "  position:absolute; top:8px; right:8px; z-index:300;",
+            "  min-width:112px; min-height:46px; padding:8px 12px;",
+            "  color:#222; background:#fff; border:1px solid #999;",
+            "  border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.45);",
+            "  font-size:15px; font-weight:700; line-height:1.1;",
+            "}",
+            "html.platform-android #androidGraphPanelClose:active { background:#d8ecff; }",
             "@media (orientation:landscape) and (max-height:500px) {",
             "  html.platform-android.has-analyser-fullscreen #androidAnalyserTouchControls {",
-            "    right:8px; top:auto; bottom:8px; width:auto;",
-            "    flex-direction:row; align-items:center; transform:none;",
+            "    right:calc(60px + env(safe-area-inset-right));",
+            "    bottom:12px;",
             "  }",
             "  html.platform-android.has-analyser-fullscreen #androidAnalyserRangeStatus {",
             "    min-width:96px; text-align:left;",
+            "  }",
+            "  html.platform-android #androidGraphPanelClose {",
+            "    top:8px; right:calc(10px + env(safe-area-inset-right));",
             "  }",
             "}",
         ].join("\n");
@@ -95,6 +106,30 @@
         controls.appendChild(outButton);
         controls.appendChild(status);
         analyser.appendChild(controls);
+
+        var graphPanel = document.querySelector(".log-graph-config");
+        if (graphPanel && !document.getElementById("androidGraphPanelClose")) {
+            var graphCloseButton = document.createElement("button");
+            graphCloseButton.type = "button";
+            graphCloseButton.id = "androidGraphPanelClose";
+            graphCloseButton.textContent = "✕ Close graphs";
+            graphCloseButton.setAttribute("aria-label", "Close graph setup panel");
+            graphPanel.appendChild(graphCloseButton);
+
+            graphCloseButton.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                var originalClose = document.querySelector(".log-close-legend-dialog");
+                if (originalClose) {
+                    $(originalClose).trigger("click");
+                } else {
+                    $(graphPanel).hide();
+                    $(".log-open-legend-dialog").show();
+                    $(window).trigger("resize");
+                }
+            });
+        }
 
         var selectedIn = null;
         var selectedOut = null;
@@ -167,7 +202,7 @@
         updateStatus();
         document.documentElement.setAttribute(
             "data-android-controls",
-            "stable-analyser-range-100"
+            "stable-analyser-range-101"
         );
     }
 
