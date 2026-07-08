@@ -3,7 +3,9 @@
     android:id="@+id/root_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#101417">
+    android:background="#101417"
+    android:fitsSystemWindows="true"
+    android:clipToPadding="true">
 
     <WebView
         android:id="@+id/web_view"
