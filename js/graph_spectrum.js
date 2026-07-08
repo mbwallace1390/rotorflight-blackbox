@@ -47,6 +47,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
         var analyserZoomXValueElem = null;
         var analyserZoomYValueElem = null;
         var autoScaleButton = null;
+        var scaleToggleButton = null;
 
         if (isAndroid) {
             analyserParent.find("#androidAnalyserScalePanel").remove();
@@ -92,9 +93,18 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             yControl.append(analyserZoomYElem).append(analyserZoomYValueElem);
 
             autoScaleButton = $('<button type="button" id="androidAnalyserAutoScale">Auto scale</button>');
+            scaleToggleButton = $('<button type="button" id="androidAnalyserScaleToggle" aria-controls="androidAnalyserScalePanel">Scale controls</button>');
 
             mobileScalePanel.append(xControl, yControl, autoScaleButton);
-            analyserParent.append(mobileScalePanel);
+            analyserParent.append(mobileScalePanel, scaleToggleButton);
+
+            scaleToggleButton.on("click", function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                setMobileScalePanelCollapsed(!analyserParent.hasClass("android-analyser-scale-collapsed"));
+            });
+
+            setMobileScalePanelCollapsed(true);
         }
 
         analyserZoomXElem.val(initialZoomX);
@@ -110,6 +120,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             if (isAndroid) {
                 analyserParent.toggleClass("android-analyser-fullscreen", isFullscreen);
                 document.documentElement.classList.toggle("has-analyser-fullscreen", isFullscreen);
+                setMobileScalePanelCollapsed(true);
             }
 
             that.resize();
@@ -204,6 +215,16 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
                 });
             }
         };
+
+        function setMobileScalePanelCollapsed(collapsed) {
+            if (!isAndroid || !scaleToggleButton) {
+                return;
+            }
+
+            analyserParent.toggleClass("android-analyser-scale-collapsed", Boolean(collapsed));
+            scaleToggleButton.attr("aria-expanded", String(!collapsed));
+            scaleToggleButton.text(collapsed ? "Scale controls" : "Hide scale");
+        }
 
         function updateMobileScaleLabels() {
             if (!isAndroid) {
@@ -386,6 +407,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             autoScaleButton.on("click", function(event) {
                 event.preventDefault();
                 autoScaleSignal();
+                setMobileScalePanelCollapsed(true);
             });
 
             $(window)
