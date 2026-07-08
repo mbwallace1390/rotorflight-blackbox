@@ -143,6 +143,82 @@
         }
     }
 
+    function installAnalyserControlToggle() {
+        var analyser = document.getElementById("analyser");
+        var scalePanel = document.getElementById("androidAnalyserScalePanel");
+
+        if (!analyser || !scalePanel) {
+            return;
+        }
+
+        var toggle = document.getElementById("androidAnalyserScaleToggle");
+        if (!toggle) {
+            toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.id = "androidAnalyserScaleToggle";
+            toggle.setAttribute("aria-controls", "androidAnalyserScalePanel");
+            analyser.appendChild(toggle);
+
+            toggle.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                setAnalyserScaleCollapsed(analyser, toggle, !analyser.classList.contains("android-analyser-scale-collapsed"));
+            });
+        }
+
+        var fullscreen = analyser.classList.contains("android-analyser-fullscreen");
+        var previousFullscreen = analyser.dataset.androidScaleFullscreen === "true";
+        analyser.dataset.androidScaleFullscreen = String(fullscreen);
+
+        if (fullscreen && !previousFullscreen) {
+            setAnalyserScaleCollapsed(analyser, toggle, true);
+        } else {
+            updateAnalyserScaleToggle(analyser, toggle);
+        }
+
+        var autoScale = document.getElementById("androidAnalyserAutoScale");
+        if (autoScale && autoScale.dataset.androidCollapseBound !== "true") {
+            autoScale.dataset.androidCollapseBound = "true";
+            autoScale.addEventListener("click", function () {
+                window.setTimeout(function () {
+                    setAnalyserScaleCollapsed(analyser, toggle, true);
+                }, 0);
+            });
+        }
+    }
+
+    function setAnalyserScaleCollapsed(analyser, toggle, collapsed) {
+        analyser.classList.toggle("android-analyser-scale-collapsed", Boolean(collapsed));
+        updateAnalyserScaleToggle(analyser, toggle);
+    }
+
+    function updateAnalyserScaleToggle(analyser, toggle) {
+        var collapsed = analyser.classList.contains("android-analyser-scale-collapsed");
+        toggle.setAttribute("aria-expanded", String(!collapsed));
+        toggle.textContent = collapsed ? "Scale controls" : "Hide scale";
+    }
+
+    function watchAnalyserControls() {
+        installAnalyserControlToggle();
+
+        var observer = new MutationObserver(function () {
+            installAnalyserControlToggle();
+        });
+
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["class"]
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", watchAnalyserControls, { once: true });
+    } else {
+        watchAnalyserControls();
+    }
+
     document.addEventListener("click", function (event) {
         var select = findSelect(event.target);
         if (!select || select.disabled || select.multiple || select.size > 1) {
