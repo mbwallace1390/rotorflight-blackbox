@@ -29,7 +29,7 @@ function applyPlatformStyles() {
     var root = document.documentElement;
 
     if (RotorflightPlatform.android) {
-        var androidAssetVersion = "103";
+        var androidAssetVersion = "106";
         root.classList.add("platform-android");
         root.setAttribute("data-android-layout-version", androidAssetVersion);
 
