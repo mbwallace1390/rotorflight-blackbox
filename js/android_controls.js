@@ -32,6 +32,14 @@
             "  pointer-events:none !important; width:0 !important; height:0 !important;",
             "  min-width:0 !important; min-height:0 !important; padding:0 !important; margin:0 !important;",
             "}",
+            "html.platform-android .navbar { position:relative; z-index:500; }",
+            "html.platform-android .navbar-header { position:relative; z-index:520; }",
+            "html.platform-android .navbar-logo { padding-right:78px; }",
+            "html.platform-android .navbar-toggle {",
+            "  position:absolute !important; top:8px; right:12px; z-index:560 !important;",
+            "  pointer-events:auto !important; touch-action:manipulation;",
+            "}",
+            "html.platform-android #navbar { position:relative; z-index:550; background:#222; }",
             "html.platform-android #androidAnalyserTouchControls {",
             "  display:none; position:absolute; z-index:260; pointer-events:auto;",
             "  gap:5px; padding:6px; box-sizing:border-box;",
@@ -87,6 +95,55 @@
             "}",
         ].join("\n");
         document.head.appendChild(style);
+
+        function installAndroidNavbarToggle() {
+            var button = document.querySelector(".navbar-toggle");
+            var navbar = document.getElementById("navbar");
+            if (!button || !navbar || button.dataset.androidToggleInstalled === "true") {
+                return;
+            }
+
+            button.dataset.androidToggleInstalled = "true";
+            var lastTouchTime = 0;
+
+            function stopEvent(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+            }
+
+            function setOpen(open) {
+                navbar.classList.toggle("in", open);
+                navbar.style.height = open ? "auto" : "";
+                button.classList.toggle("collapsed", !open);
+                button.setAttribute("aria-expanded", open ? "true" : "false");
+                document.documentElement.classList.toggle("android-navbar-open", open);
+            }
+
+            function toggleNavbar(event) {
+                stopEvent(event);
+                setOpen(!navbar.classList.contains("in"));
+            }
+
+            button.addEventListener("touchstart", function (event) {
+                stopEvent(event);
+            }, { capture: true, passive: false });
+
+            button.addEventListener("touchend", function (event) {
+                lastTouchTime = Date.now();
+                toggleNavbar(event);
+            }, { capture: true, passive: false });
+
+            button.addEventListener("click", function (event) {
+                if (Date.now() - lastTouchTime < 700) {
+                    stopEvent(event);
+                    return;
+                }
+                toggleNavbar(event);
+            }, true);
+        }
+
+        installAndroidNavbarToggle();
 
         function hideLegacyScaleControls() {
             var legacyPanel = document.getElementById("androidAnalyserScalePanel");
@@ -235,7 +292,7 @@
         updateStatus();
         document.documentElement.setAttribute(
             "data-android-controls",
-            "stable-analyser-range-106"
+            "stable-analyser-range-108"
         );
     }
 
