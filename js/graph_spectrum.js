@@ -7,7 +7,8 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
         ANALYSER_LARGE_TOP_MARGIN = 10,
         ANALYSER_LARGE_HEIGHT_MARGIN = 20,
         ANALYSER_LARGE_WIDTH_MARGIN = 20,
-        ANDROID_MAX_SIGNAL_GAIN = 20000;
+        ANDROID_MAX_SIGNAL_GAIN = 20000,
+        DEFAULT_ZOOM = 100;
 
     var
         that = this,
@@ -28,6 +29,9 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
 
     try {
         var isFullscreen = false;
+        var initialAutoScalePending = false;
+        var initialZoomX = DEFAULT_ZOOM;
+        var initialZoomY = DEFAULT_ZOOM;
         var sysConfig = flightLog.getSysConfig();
 
         GraphSpectrumCalc.initialize(flightLog, sysConfig);
@@ -57,6 +61,26 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
                 step: 10
             });
 
+            var storedZoomX = Number(userSettings.androidAnalyserZoomX);
+            var storedZoomY = Number(userSettings.androidAnalyserZoomY);
+            var minZoomX = Number(analyserZoomXElem.attr("min"));
+            var maxZoomX = Number(analyserZoomXElem.attr("max"));
+            var minZoomY = Number(analyserZoomYElem.attr("min"));
+            var maxZoomY = Number(analyserZoomYElem.attr("max"));
+            var storedScaleIsValid = Number.isFinite(storedZoomX)
+                && Number.isFinite(storedZoomY)
+                && storedZoomX >= minZoomX
+                && storedZoomX <= maxZoomX
+                && storedZoomY >= minZoomY
+                && storedZoomY <= maxZoomY;
+
+            if (storedScaleIsValid) {
+                initialZoomX = storedZoomX;
+                initialZoomY = storedZoomY;
+            } else {
+                initialAutoScalePending = true;
+            }
+
             mobileScalePanel = $('<div id="androidAnalyserScalePanel"></div>');
 
             var xControl = $('<label class="android-analyser-scale-control"><span>Frequency range</span></label>');
@@ -73,6 +97,12 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             analyserParent.append(mobileScalePanel);
         }
 
+        analyserZoomXElem.val(initialZoomX);
+        analyserZoomYElem.val(initialZoomY);
+        analyserZoomX = initialZoomX / 100;
+        analyserZoomY = 100 / initialZoomY;
+        GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
+
         this.setFullscreen = function(size) {
             isFullscreen = size === true;
             GraphSpectrumPlot.setFullScreen(isFullscreen);
@@ -83,10 +113,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             }
 
             that.resize();
-
-            if (isAndroid) {
-                autoScaleSignal();
-            }
+            that.refresh();
         };
 
         this.setInTime = function(time) {
@@ -187,6 +214,25 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             analyserZoomYValueElem.text((parseFloat(analyserZoomYElem.val()) / 100).toFixed(1) + "×");
         }
 
+        function saveAndroidScale() {
+            if (!isAndroid) {
+                return;
+            }
+
+            var storedZoomX = Number(analyserZoomXElem.val());
+            var storedZoomY = Number(analyserZoomYElem.val());
+
+            userSettings.androidAnalyserZoomX = storedZoomX;
+            userSettings.androidAnalyserZoomY = storedZoomY;
+
+            prefs.get("userSettings", function(data) {
+                data = data || {};
+                data.androidAnalyserZoomX = storedZoomX;
+                data.androidAnalyserZoomY = storedZoomY;
+                prefs.set("userSettings", data);
+            });
+        }
+
         function getVisibleSpectrumMaximum() {
             if (!fftData) {
                 return 0;
@@ -220,12 +266,12 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
 
         function autoScaleSignal() {
             if (!isAndroid || userSettings.spectrumType === SPECTRUM_TYPE.PIDERROR_VS_SETPOINT) {
-                return;
+                return false;
             }
 
             var maxValue = getVisibleSpectrumMaximum();
             if (!Number.isFinite(maxValue) || maxValue <= 0) {
-                return;
+                return false;
             }
 
             var portrait = window.innerHeight >= window.innerWidth;
@@ -238,7 +284,9 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             analyserZoomY = 100 / signalGain;
             GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
             updateMobileScaleLabels();
+            saveAndroidScale();
             that.refresh();
+            return true;
         }
 
         var dataLoad = function() {
@@ -273,7 +321,11 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
                 dataReload = false;
                 dataLoad();
                 GraphSpectrumPlot.setData(fftData, userSettings.spectrumType);
-                autoScaleSignal();
+
+                if (initialAutoScalePending) {
+                    initialAutoScalePending = false;
+                    autoScaleSignal();
+                }
             }
 
             that.draw();
@@ -302,30 +354,33 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
             trackFrequency(e, that);
         });
 
-        const DEFAULT_ZOOM = 100;
-
         analyserZoomXElem.on("input", $.debounce(100, function() {
             analyserZoomX = analyserZoomXElem.val() / 100;
             GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
             updateMobileScaleLabels();
 
             if (isAndroid) {
-                autoScaleSignal();
-            } else {
-                that.refresh();
+                saveAndroidScale();
             }
+
+            that.refresh();
         })).dblclick(function() {
             $(this).val(DEFAULT_ZOOM).trigger("input");
-        }).val(DEFAULT_ZOOM);
+        });
 
         analyserZoomYElem.on("input", $.debounce(100, function() {
             analyserZoomY = 1 / (analyserZoomYElem.val() / 100);
             GraphSpectrumPlot.setZoom(analyserZoomX, analyserZoomY);
             updateMobileScaleLabels();
+
+            if (isAndroid) {
+                saveAndroidScale();
+            }
+
             that.refresh();
         })).dblclick(function() {
             $(this).val(DEFAULT_ZOOM).trigger("input");
-        }).val(DEFAULT_ZOOM);
+        });
 
         if (isAndroid) {
             autoScaleButton.on("click", function(event) {
@@ -337,7 +392,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
                 .off("resize.androidAnalyser orientationchange.androidAnalyser")
                 .on("resize.androidAnalyser orientationchange.androidAnalyser", $.debounce(220, function() {
                     that.resize();
-                    autoScaleSignal();
+                    that.refresh();
                 }));
 
             updateMobileScaleLabels();
@@ -412,6 +467,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
 
         function saveOneUserSetting(name, value) {
             prefs.get("userSettings", function(data) {
+                data = data || {};
                 data[name] = value;
                 prefs.set("userSettings", data);
             });
