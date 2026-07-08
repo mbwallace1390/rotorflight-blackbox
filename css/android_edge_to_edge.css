@@ -1,7 +1,8 @@
 /* Edge-to-edge Android WebView layout.
  * Android WebView reports zero env() safe-area values on some Samsung devices,
  * so orientation-specific fallbacks protect the controls while backgrounds
- * continue drawing beneath the system bars. */
+ * continue drawing beneath the system bars.
+ * Device-test revision: protect portrait bottom and landscape right navigation. */
 html.platform-android {
     --android-safe-top: max(env(safe-area-inset-top, 0px), 24px);
     --android-safe-right: env(safe-area-inset-right, 0px);
