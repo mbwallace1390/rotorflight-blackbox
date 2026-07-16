@@ -7,7 +7,22 @@ plugins {
 
 val webRoot = rootProject.projectDir.parentFile
 val generatedWebAssets = layout.buildDirectory.dir("generated/webAssets")
-val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+
+// Derived from git history rather than CI's run number so that local builds and
+// CI builds agree on a monotonically increasing versionCode - a local build with
+// a lower code than what's already installed makes Android refuse to update the
+// app in place (INSTALL_FAILED_VERSION_DOWNGRADE), forcing an uninstall first.
+val gitCommitCount = try {
+    val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+        .directory(webRoot)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText().trim()
+    process.waitFor()
+    output.toIntOrNull()
+} catch (e: Exception) {
+    null
+} ?: 1
 
 val syncWebAssets by tasks.registering(Sync::class) {
     from(webRoot) {
@@ -49,8 +64,8 @@ android {
         applicationId = "org.rotorflight.blackbox"
         minSdk = 24
         targetSdk = 36
-        versionCode = ciRunNumber
-        versionName = "0.1.$ciRunNumber"
+        versionCode = gitCommitCount
+        versionName = "0.1.$gitCommitCount"
     }
 
     buildFeatures {
