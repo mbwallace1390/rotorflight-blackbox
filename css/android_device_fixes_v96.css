@@ -1,0 +1,212 @@
+/* Samsung Android layout fixes v96.
+ * This file is loaded with a versioned URL so an installed APK cannot reuse
+ * stale WebView CSS from an earlier test build. */
+
+html.platform-android {
+    --android-safe-top: 42px !important;
+    --android-safe-right: 0px !important;
+    --android-safe-bottom: 88px !important;
+    --android-safe-left: 0px !important;
+}
+
+@media (orientation: landscape) {
+    html.platform-android {
+        --android-safe-top: 32px !important;
+        --android-safe-right: 88px !important;
+        --android-safe-bottom: 0px !important;
+        --android-safe-left: 0px !important;
+    }
+}
+
+html.platform-android .navbar-static-top,
+html.platform-android .header-pane,
+html.platform-android .navbar-header {
+    height: calc(50px + var(--android-safe-top)) !important;
+    min-height: calc(50px + var(--android-safe-top)) !important;
+}
+
+html.platform-android .header-pane {
+    position: relative !important;
+    padding: 0 !important;
+}
+
+/* Move the actual logo block, not just its parent padding. */
+html.platform-android .navbar-logo {
+    position: relative !important;
+    top: 0 !important;
+    transform: translateY(var(--android-safe-top)) !important;
+    max-width: calc(100vw - 105px - var(--android-safe-right)) !important;
+}
+
+html.platform-android .navbar-logo .log-filename {
+    display: block !important;
+    max-width: calc(100vw - 250px - var(--android-safe-right)) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+/* Bootstrap floats this control. Pin it to a known safe location instead. */
+html.platform-android .navbar-toggle {
+    position: absolute !important;
+    z-index: 80 !important;
+    top: calc(var(--android-safe-top) + 7px) !important;
+    right: 14px !important;
+    float: none !important;
+    margin: 0 !important;
+}
+
+@media (orientation: landscape) {
+    html.platform-android .navbar-toggle {
+        right: calc(var(--android-safe-right) + 14px) !important;
+    }
+}
+
+html.platform-android.has-video .video-top-controls,
+html.platform-android.has-log .video-top-controls {
+    top: calc(50px + var(--android-safe-top)) !important;
+    right: var(--android-safe-right) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+}
+
+html.platform-android.has-video .graph-row,
+html.platform-android.has-log .graph-row {
+    right: var(--android-safe-right) !important;
+    bottom: calc(80px + var(--android-safe-bottom)) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+}
+
+html.platform-android.has-video .log-seek-bar,
+html.platform-android.has-log .log-seek-bar {
+    right: var(--android-safe-right) !important;
+    bottom: calc(20px + var(--android-safe-bottom)) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+}
+
+html.platform-android #status-bar {
+    right: var(--android-safe-right) !important;
+    bottom: var(--android-safe-bottom) !important;
+    left: var(--android-safe-left) !important;
+    width: auto !important;
+    height: 20px !important;
+    padding: 0 10px !important;
+}
+
+/* Independent analyser button rail. It is outside spectrumToolbar, so the
+ * dropdown panel can never cover the Scale button. */
+html.platform-android #analyser #androidAnalyserQuickControls {
+    position: absolute !important;
+    z-index: 90 !important;
+    top: 8px !important;
+    right: 8px !important;
+    display: none;
+    gap: 6px;
+    pointer-events: auto !important;
+}
+
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls {
+    display: flex !important;
+}
+
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls #analyserResize,
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls #androidAnalyserScaleToggle {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    pointer-events: auto !important;
+}
+
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls #analyserResize {
+    width: 52px !important;
+    min-width: 52px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    color: #fff !important;
+    font-size: 22px !important;
+    background: rgba(255, 255, 255, 0.16) !important;
+    border-radius: 9px !important;
+}
+
+html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls #androidAnalyserScaleToggle {
+    width: 92px !important;
+    min-width: 92px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    padding: 5px 9px !important;
+    color: #222 !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+    background: rgba(255, 255, 255, 0.97) !important;
+    border: 1px solid #aaa !important;
+    border-radius: 9px !important;
+}
+
+/* Leave room for the independent button rail. */
+html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+    z-index: 70 !important;
+    right: 168px !important;
+    left: 8px !important;
+    overflow: visible !important;
+}
+
+@media (orientation: landscape) {
+    html.platform-android #analyser #androidAnalyserQuickControls {
+        flex-direction: row !important;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+        display: grid !important;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) !important;
+        gap: 8px !important;
+    }
+}
+
+@media (orientation: portrait) {
+    html.platform-android #analyser #androidAnalyserQuickControls {
+        flex-direction: column !important;
+        width: 94px !important;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls #androidAnalyserScaleToggle,
+    html.platform-android #analyser.android-analyser-fullscreen #androidAnalyserQuickControls #analyserResize {
+        width: 94px !important;
+        min-width: 94px !important;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumToolbar {
+        right: 110px !important;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        grid-template-areas:
+            "spectrum"
+            "filter" !important;
+        gap: 6px !important;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #spectrumType {
+        grid-area: spectrum !important;
+    }
+
+    html.platform-android #analyser.android-analyser-fullscreen #overdrawSpectrumType {
+        grid-area: filter !important;
+    }
+}
+
+html.platform-android #analyser:not(.android-analyser-fullscreen) {
+    overflow: hidden !important;
+    background: rgba(0, 0, 0, 0.94) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45) !important;
+}
