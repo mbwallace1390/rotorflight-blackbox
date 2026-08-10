@@ -39,6 +39,43 @@
         }
     }
 
+    function rangeError(code, message) {
+        var error = new RangeError(message);
+        error.code = code;
+        return error;
+    }
+
+    function requireSelectedRange(flightLog, options) {
+        var logMinTimeUs = flightLog.getMinTime();
+        var logMaxTimeUs = flightLog.getMaxTime();
+        var requested = options && options.timeRangeUs;
+
+        if (!requested
+                || !Number.isFinite(requested.startTimeUs)
+                || !Number.isFinite(requested.endTimeUs)) {
+            throw rangeError(
+                "ANALYSIS_RANGE_REQUIRED",
+                "Set both graph In and Out markers before running Tune Advisor"
+            );
+        }
+
+        if (requested.startTimeUs < logMinTimeUs
+                || requested.endTimeUs > logMaxTimeUs
+                || requested.startTimeUs >= requested.endTimeUs) {
+            throw rangeError(
+                "ANALYSIS_RANGE_INVALID",
+                "The selected graph In/Out range is invalid for this log"
+            );
+        }
+
+        return {
+            logMinTimeUs: logMinTimeUs,
+            logMaxTimeUs: logMaxTimeUs,
+            startTimeUs: requested.startTimeUs,
+            endTimeUs: requested.endTimeUs
+        };
+    }
+
     function reportProgress(options, phase, completed, total) {
         if (!options || typeof options.onProgress !== "function") {
             return;
@@ -201,9 +238,14 @@
         return Number.isFinite(percent) ? percent : null;
     }
 
-    function processEvents(snapshot, chunks, seenEventKeys) {
+    function processEvents(snapshot, chunks, seenEventKeys, startTimeUs, endTimeUs) {
         chunks.forEach(function(chunk) {
             (chunk.events || []).forEach(function(event) {
+                if (!Number.isFinite(event.time)
+                        || event.time < startTimeUs
+                        || event.time > endTimeUs) {
+                    return;
+                }
                 var state = event.data && event.data.govState;
                 var key = [event.event, event.time, state].join(":");
                 if (seenEventKeys[key]) {
@@ -226,6 +268,43 @@
         });
     }
 
+    function gapBoundaryTimes(chunks, chunkPosition, frameIndex, timeFieldIndex) {
+        var leftTimeUs = null;
+        var rightTimeUs = null;
+        var chunkOffset;
+        var frames;
+        var index;
+
+        for (chunkOffset = chunkPosition; chunkOffset >= 0 && leftTimeUs === null; chunkOffset--) {
+            frames = chunks[chunkOffset].frames || [];
+            index = chunkOffset === chunkPosition
+                ? Math.min(frameIndex, frames.length - 1)
+                : frames.length - 1;
+            for (; index >= 0; index--) {
+                leftTimeUs = finiteFrameValue(frames[index], timeFieldIndex);
+                if (leftTimeUs !== null) {
+                    break;
+                }
+            }
+        }
+
+        for (chunkOffset = chunkPosition; chunkOffset < chunks.length && rightTimeUs === null; chunkOffset++) {
+            frames = chunks[chunkOffset].frames || [];
+            index = chunkOffset === chunkPosition ? Math.max(0, frameIndex + 1) : 0;
+            for (; index < frames.length; index++) {
+                rightTimeUs = finiteFrameValue(frames[index], timeFieldIndex);
+                if (rightTimeUs !== null) {
+                    break;
+                }
+            }
+        }
+
+        return {
+            leftTimeUs: leftTimeUs,
+            rightTimeUs: rightTimeUs
+        };
+    }
+
     async function scanFlightLog(flightLog, options) {
         if (!metrics || !rules) {
             throw new Error("Tune Advisor dependencies were not loaded");
@@ -239,12 +318,12 @@
             throw new TypeError("A parsed FlightLog is required");
         }
 
-        var minTimeUs = flightLog.getMinTime();
-        var maxTimeUs = flightLog.getMaxTime();
+        var selectedRange = requireSelectedRange(flightLog, options);
+        var minTimeUs = selectedRange.startTimeUs;
+        var maxTimeUs = selectedRange.endTimeUs;
         var durationUs = Math.max(0, maxTimeUs - minTimeUs);
         var sysConfig = flightLog.getSysConfig() || {};
         var indexes = collectIndexes(flightLog, sysConfig);
-        var stats = flightLog.getStats() || {};
         var windowCount = Math.max(1, Math.ceil(durationUs / WINDOW_US));
         var quantileStrideUs = Math.max(1, Math.ceil(durationUs / MAX_QUANTILE_SAMPLES));
         var governorStrideUs = Math.max(10000, Math.ceil(durationUs / MAX_GOVERNOR_RECORDS));
@@ -272,15 +351,25 @@
             debugName: indexes.debugName,
             fieldsMask: sysConfig.fields_mask,
             logIndex: typeof flightLog.getLogIndex === "function" ? flightLog.getLogIndex() : 0,
+            logMinTimeUs: selectedRange.logMinTimeUs,
+            logMaxTimeUs: selectedRange.logMaxTimeUs,
             minTimeUs: minTimeUs,
             maxTimeUs: maxTimeUs,
             durationUs: durationUs,
             sampleCount: 0,
             invalidTimeCount: 0,
             invalidRequiredValueCount: 0,
-            corruptFrames: Number(stats.totalCorruptFrames) || 0,
+            // The parser's aggregate corruption counter has no timestamps, so
+            // attributing any part of it to a selected graph range would leak
+            // whole-file evidence into a range-only result.
+            corruptFrames: null,
             discontinuities: 0,
             hasEndMarker: false,
+            // FlightLog's public max time is the final decoded I-frame. A
+            // trailing LOG_END event can have a later timestamp that no graph
+            // Out marker can select, so range-only analysis cannot fairly
+            // classify the end marker as present or missing.
+            endMarkerEvaluable: false,
             dtSamples: [],
             axisAccumulators: [makeAxisAccumulator(), makeAxisAccumulator(), makeAxisAccumulator()],
             battery: { count: 0, minRaw: Infinity, maxRaw: -Infinity },
@@ -325,10 +414,22 @@
             var windowStartUs = minTimeUs + windowIndex * WINDOW_US;
             var windowEndUs = Math.min(maxTimeUs, windowStartUs + WINDOW_US);
             var chunks = flightLog.getChunksInTimeRange(windowStartUs, windowEndUs);
-            processEvents(snapshot, chunks, seenEventKeys);
+            processEvents(snapshot, chunks, seenEventKeys, minTimeUs, maxTimeUs);
 
-            chunks.forEach(function(chunk) {
+            chunks.forEach(function(chunk, chunkPosition) {
                 Object.keys(chunk.gapStartsHere || {}).forEach(function(frameKey) {
+                    var boundaries = gapBoundaryTimes(
+                        chunks,
+                        chunkPosition,
+                        Number(frameKey),
+                        indexes.time
+                    );
+                    if (boundaries.leftTimeUs === null
+                            || boundaries.rightTimeUs === null
+                            || boundaries.leftTimeUs < minTimeUs
+                            || boundaries.rightTimeUs > maxTimeUs) {
+                        return;
+                    }
                     var gapKey = String(chunk.index) + ":" + frameKey;
                     seenGaps[gapKey] = true;
                 });
@@ -337,7 +438,8 @@
                     var timeUs = finiteFrameValue(frame, indexes.time);
                     var isLastWindow = windowIndex === windowCount - 1;
                     if (timeUs === null) {
-                        snapshot.invalidTimeCount++;
+                        // An untimestamped frame cannot be proven to lie inside
+                        // the selected range, so do not attribute it to I→O.
                         return;
                     }
 

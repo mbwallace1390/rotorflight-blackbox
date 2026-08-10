@@ -189,7 +189,7 @@
 
         var status = document.createElement("div");
         status.id = "androidAnalyserRangeStatus";
-        status.innerHTML = "I: full<br>O: full";
+        status.innerHTML = "I: not set<br>O: not set";
 
         controls.appendChild(autoButton);
         controls.appendChild(inButton);
@@ -224,14 +224,13 @@
         var selectedIn = null;
         var selectedOut = null;
 
-        function currentTimeText() {
-            var field = document.querySelector(".graph-time");
-            return field && field.value ? field.value : "current";
+        function offsetText(valueUs) {
+            return Number.isFinite(valueUs) ? (valueUs / 1000000).toFixed(1) + " s" : null;
         }
 
         function updateStatus() {
-            status.innerHTML = "I: " + (selectedIn || "full")
-                + "<br>O: " + (selectedOut || "full");
+            status.innerHTML = "I: " + (selectedIn || "not set")
+                + "<br>O: " + (selectedOut || "not set");
             inButton.classList.toggle("range-set", selectedIn !== null);
             outButton.classList.toggle("range-set", selectedOut !== null);
         }
@@ -247,6 +246,12 @@
             event.metaKey = false;
             $(document).trigger(event);
         }
+
+        $(document).on("rotorlens:analysis-range-change.androidControls", function (_event, state) {
+            selectedIn = state ? offsetText(state.inOffsetUs) : null;
+            selectedOut = state ? offsetText(state.outOffsetUs) : null;
+            updateStatus();
+        });
 
         autoButton.addEventListener("click", function (event) {
             event.preventDefault();
@@ -273,26 +278,20 @@
             event.preventDefault();
             event.stopPropagation();
 
-            var time = currentTimeText();
             dispatchShortcut("I");
-            selectedIn = selectedIn === time ? null : time;
-            updateStatus();
         });
 
         outButton.addEventListener("click", function (event) {
             event.preventDefault();
             event.stopPropagation();
 
-            var time = currentTimeText();
             dispatchShortcut("O");
-            selectedOut = selectedOut === time ? null : time;
-            updateStatus();
         });
 
         updateStatus();
         document.documentElement.setAttribute(
             "data-android-controls",
-            "stable-analyser-range-108"
+            "stable-analyser-range-115"
         );
     }
 

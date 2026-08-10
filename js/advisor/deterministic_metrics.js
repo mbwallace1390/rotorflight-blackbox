@@ -306,11 +306,10 @@
             return Number.isFinite(event.timeUs) && Number.isFinite(event.state);
         });
         var ranges = buildActiveRanges(governorEvents, snapshot.maxTimeUs);
-        var hasGovernorStateEvidence = governorEvents.length > 0;
         var records = (snapshot.governorRecords || []).map(function(record) {
-            var active = hasGovernorStateEvidence
-                ? timeInRanges(record.timeUs, ranges, 500000)
-                : record.targetRpm > 500 && record.actualRpm > 0;
+            // The user-selected range must itself contain explicit ACTIVE
+            // governor state evidence; activity is never inferred from RPM.
+            var active = timeInRanges(record.timeUs, ranges, 500000);
             return Object.assign({}, record, { active: active });
         }).filter(function(record) {
             return record.active && record.targetRpm > 500 && record.actualRpm > 0;

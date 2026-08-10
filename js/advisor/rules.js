@@ -45,23 +45,23 @@
         var blockerCount = 0;
         var cautionCount = 0;
         var invalidSampleCount = snapshot.invalidTimeCount + snapshot.invalidRequiredValueCount;
-        var fullTimeRange = [snapshot.minTimeUs, snapshot.maxTimeUs];
+        var selectedTimeRange = [snapshot.minTimeUs, snapshot.maxTimeUs];
 
         qualityEvidenceIds.push(evidence.add({
             id: "quality.duration",
-            metric: "Log duration",
+            metric: "Selected range duration",
             value: round(snapshot.durationUs / 1000000, 3),
             unit: "s",
-            scope: "log",
-            timeRangeUs: fullTimeRange
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
         }));
         qualityEvidenceIds.push(evidence.add({
             id: "quality.sample-rate",
             metric: "Measured logging rate",
             value: round(measurement.quality.sampleRateHz, 2),
             unit: "Hz",
-            scope: "log",
-            timeRangeUs: fullTimeRange
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
         }));
         qualityEvidenceIds.push(evidence.add({
             id: "quality.powered-duration",
@@ -75,14 +75,14 @@
             metric: "Corrupt frames",
             value: snapshot.corruptFrames,
             unit: "frames",
-            scope: "log"
+            scope: "selected-range"
         }));
         qualityEvidenceIds.push(evidence.add({
             id: "quality.discontinuities",
             metric: "Detected discontinuities",
             value: snapshot.discontinuities,
             unit: "events",
-            scope: "log"
+            scope: "selected-range"
         }));
 
         if (snapshot.firmwareTypeCode !== 5) {
@@ -111,9 +111,9 @@
             ));
         }
 
-        var corruptionRatio = snapshot.sampleCount > 0
+        var corruptionRatio = Number.isFinite(snapshot.corruptFrames) && snapshot.sampleCount > 0
             ? snapshot.corruptFrames / snapshot.sampleCount
-            : 1;
+            : null;
         if (corruptionRatio > 0.01 || snapshot.discontinuities > 5) {
             blockerCount++;
             findings.push(finding(
@@ -138,7 +138,7 @@
             ));
         }
 
-        if (!snapshot.hasEndMarker) {
+        if (snapshot.endMarkerEvaluable && !snapshot.hasEndMarker) {
             cautionCount++;
             findings.push(finding(
                 "missing-end-marker",
@@ -224,7 +224,7 @@
                 scope: axis.axis,
                 value: round(axis.all.rmsErrorDps, 2),
                 unit: "deg/s",
-                timeRangeUs: fullTimeRange
+                timeRangeUs: selectedTimeRange
             });
             var p95Id = evidence.add({
                 id: "tracking." + axis.axis + ".p95",
@@ -232,7 +232,7 @@
                 scope: axis.axis,
                 value: round(axis.all.p95AbsErrorDps, 2),
                 unit: "deg/s",
-                timeRangeUs: fullTimeRange
+                timeRangeUs: selectedTimeRange
             });
 
             return {
@@ -275,7 +275,7 @@
                 value: round(battery.minimumVolts, 2),
                 unit: "V",
                 scope: "powered-flight",
-                timeRangeUs: fullTimeRange
+                timeRangeUs: selectedTimeRange
             }));
             if (battery.minimumCellVolts !== null) {
                 batteryEvidenceIds.push(evidence.add({
@@ -284,7 +284,7 @@
                     value: round(battery.minimumCellVolts, 3),
                     unit: "V/cell",
                     scope: "powered-flight",
-                    timeRangeUs: fullTimeRange
+                    timeRangeUs: selectedTimeRange
                 }));
             }
         }
@@ -371,7 +371,7 @@
                 "info",
                 "Capture a targeted governor log",
                 "Governor request, target, and actual headspeed were not available together during an explicitly ACTIVE interval.",
-                "Set Blackbox debug mode to Governor, reach ACTIVE governor state, and capture the controlled test described by the official Rotorflight procedure.",
+                "Set Blackbox debug mode to Governor. Place In before the governor enters ACTIVE and Out after the controlled test so the ACTIVE event is inside the selected range.",
                 governorEvidenceIds,
                 ["rotorflight-governor-tuning"]
             ));
@@ -409,11 +409,19 @@
                 firmwareType: snapshot.firmwareType,
                 firmwareVersion: snapshot.firmwareVersion,
                 logIndex: snapshot.logIndex,
+                startTimeUs: snapshot.logMinTimeUs,
+                endTimeUs: snapshot.logMaxTimeUs,
+                durationUs: snapshot.logMaxTimeUs - snapshot.logMinTimeUs
+            },
+            range: {
                 startTimeUs: snapshot.minTimeUs,
                 endTimeUs: snapshot.maxTimeUs,
+                startOffsetUs: snapshot.minTimeUs - snapshot.logMinTimeUs,
+                endOffsetUs: snapshot.maxTimeUs - snapshot.logMinTimeUs,
                 durationUs: snapshot.durationUs,
                 sampleRateHz: round(measurement.quality.sampleRateHz, 2),
-                sampleCount: snapshot.sampleCount
+                sampleCount: snapshot.sampleCount,
+                poweredDurationUs: snapshot.poweredDurationUs
             },
             grade: {
                 overall: overallGrade,
@@ -426,7 +434,7 @@
                 corruptFrames: snapshot.corruptFrames,
                 discontinuities: snapshot.discontinuities,
                 invalidSampleCount: invalidSampleCount,
-                missingEndMarker: !snapshot.hasEndMarker,
+                missingEndMarker: snapshot.endMarkerEvaluable ? !snapshot.hasEndMarker : null,
                 evidenceIds: qualityEvidenceIds.concat([rxEvidenceId])
             },
             coverage: Object.assign({}, snapshot.coverage, {

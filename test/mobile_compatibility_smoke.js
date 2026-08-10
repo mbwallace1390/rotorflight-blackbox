@@ -140,10 +140,34 @@ function assertSpectrumRangeCap() {
     );
 }
 
+function assertTuneAdvisorSelectedRangeContract() {
+    const mainSource = source("js/main.js");
+    const controlsSource = source("js/android_controls.js");
+    const advisorSource = source("js/advisor/flightlog_adapter.js");
+    const contractSource = source("js/advisor/evidence_contract.js");
+    const platformSource = source("index.js");
+
+    assert.ok(mainSource.includes("function getSelectedAnalysisRange()"));
+    assert.ok(mainSource.includes("function syncGraphAnalysisRange()"));
+    assert.ok(mainSource.includes('$(document).trigger("rotorlens:analysis-range-change"'));
+    assert.ok(
+        mainSource.includes("Number.isFinite(videoExportInTime)")
+            && mainSource.includes("Number.isFinite(videoExportOutTime)"),
+        "Both graph markers must be present before the Advisor receives a range"
+    );
+    assert.ok(controlsSource.includes("rotorlens:analysis-range-change.androidControls"));
+    assert.ok(!controlsSource.includes("currentTimeText"));
+    assert.ok(advisorSource.includes('"ANALYSIS_RANGE_REQUIRED"'));
+    assert.ok(advisorSource.includes("options.timeRangeUs"));
+    assert.ok(contractSource.includes("selectedRangeRequired: true"));
+    assert.ok(platformSource.includes('androidAssetVersion = "115"'));
+}
+
 assertMobileAssetURLs();
 assertNativeOpenSeam();
 assertMobileGraphDropdownSupport();
 assertMobileHeaderDialogLayout();
 assertSpectrumRangeCap();
+assertTuneAdvisorSelectedRangeContract();
 
-console.log("Mobile compatibility smoke tests passed: hosted assets and analyser range cap");
+console.log("Mobile compatibility smoke tests passed: hosted assets, ranges, and mobile layouts");

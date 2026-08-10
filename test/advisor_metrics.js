@@ -194,6 +194,8 @@ function assertV1WithholdsSettingDirections() {
         firmwareTypeCode: 5,
         firmwareVersion: "4.3.0",
         logIndex: 0,
+        logMinTimeUs: 0,
+        logMaxTimeUs: 10000000,
         minTimeUs: 0,
         maxTimeUs: 10000000,
         durationUs: 10000000,
@@ -204,6 +206,7 @@ function assertV1WithholdsSettingDirections() {
         corruptFrames: 0,
         discontinuities: 0,
         hasEndMarker: true,
+        endMarkerEvaluable: true,
         poweredSampleCount: 10000,
         failsafeSampleCount: 0,
         rxLossSampleCount: 0,
@@ -306,6 +309,70 @@ async function assertCancellation() {
     assert.strictEqual(error.code, "ANALYSIS_CANCELLED");
 }
 
+async function assertRangeRejected(flightLog, timeRangeUs, expectedCode) {
+    let error = null;
+    try {
+        await engine.analyzeFlightLog(flightLog, {
+            timeRangeUs,
+            isCancelled: function() { return false; }
+        });
+    } catch (caught) {
+        error = caught;
+    }
+
+    assert.ok(error);
+    assert.strictEqual(error.code, expectedCode);
+}
+
+async function assertGapBoundaryScoping() {
+    const chunk = {
+        index: 0,
+        frames: [[0, 100000], [0, 150000]],
+        events: [],
+        gapStartsHere: { 0: true }
+    };
+    const flightLog = {
+        getMinTime: function() { return 0; },
+        getMaxTime: function() { return 200000; },
+        getSysConfig: function() {
+            return {
+                firmwareType: 5,
+                firmwareVersion: "4.3.0",
+                debug_mode: 0,
+                looptime: 1000,
+                frameIntervalPNum: 1,
+                frameIntervalPDenom: 1
+            };
+        },
+        getMainFieldIndexByName: function(name) {
+            return name === "time" ? 1 : undefined;
+        },
+        getChunksInTimeRange: function() { return [chunk]; },
+        getLogIndex: function() { return 0; },
+        getNumCellsEstimate: function() { return false; }
+    };
+
+    const gapOutsideRange = await engine.analyzeFlightLog(flightLog, {
+        timeRangeUs: { startTimeUs: 50000, endTimeUs: 125000 },
+        isCancelled: function() { return false; }
+    });
+    assert.strictEqual(
+        gapOutsideRange.quality.discontinuities,
+        0,
+        "A gap whose resumed frame lies after Out must not be attributed to the selected range"
+    );
+
+    const gapInsideRange = await engine.analyzeFlightLog(flightLog, {
+        timeRangeUs: { startTimeUs: 50000, endTimeUs: 175000 },
+        isCancelled: function() { return false; }
+    });
+    assert.strictEqual(
+        gapInsideRange.quality.discontinuities,
+        1,
+        "A gap with both boundary frames inside I/O must remain visible"
+    );
+}
+
 async function assertRotorflightFixture() {
     const fixturePath = path.join(
         repositoryRoot,
@@ -322,28 +389,61 @@ async function assertRotorflightFixture() {
     const flightLog = new runtime.FlightLog(Uint8Array.from(fixture));
     assert.strictEqual(flightLog.openLog(0), true);
 
+    const logMinTimeUs = flightLog.getMinTime();
+    const logMaxTimeUs = flightLog.getMaxTime();
+    await assertRangeRejected(flightLog, null, "ANALYSIS_RANGE_REQUIRED");
+    await assertRangeRejected(
+        flightLog,
+        { startTimeUs: logMinTimeUs },
+        "ANALYSIS_RANGE_REQUIRED"
+    );
+    await assertRangeRejected(
+        flightLog,
+        { startTimeUs: logMinTimeUs + 1000000, endTimeUs: logMinTimeUs + 1000000 },
+        "ANALYSIS_RANGE_INVALID"
+    );
+    await assertRangeRejected(
+        flightLog,
+        { startTimeUs: logMinTimeUs + 2000000, endTimeUs: logMinTimeUs + 1000000 },
+        "ANALYSIS_RANGE_INVALID"
+    );
+    await assertRangeRejected(
+        flightLog,
+        { startTimeUs: logMinTimeUs - 1, endTimeUs: logMinTimeUs + 6000000 },
+        "ANALYSIS_RANGE_INVALID"
+    );
+
+    const selectedRange = {
+        startTimeUs: logMinTimeUs + 6000000,
+        endTimeUs: Math.min(logMaxTimeUs, logMinTimeUs + 18000000)
+    };
+
     const progress = [];
     const result = await engine.analyzeFlightLog(flightLog, {
+        timeRangeUs: selectedRange,
         isCancelled: function() { return false; },
         onProgress: function(update) { progress.push(update); }
     });
 
-    assert.strictEqual(result.schemaVersion, 1);
+    assert.strictEqual(result.schemaVersion, 2);
     assert.strictEqual(result.analysisMode, "deterministic-local");
     assert.strictEqual(result.capabilities.cloudRequired, false);
     assert.strictEqual(result.capabilities.directSettingWrites, false);
+    assert.strictEqual(result.capabilities.selectedRangeRequired, true);
     assert.strictEqual(result.capabilities.rawLogIncluded, false);
     assert.ok(["blocked", "limited", "supported"].includes(result.grade.overall));
     assert.ok(!JSON.stringify(result.grade).match(/"[ACF]"/));
     assert.strictEqual(result.log.firmwareType, "Rotorflight");
     assert.strictEqual(result.log.firmwareVersion, "4.3.0");
-    // FlightLog's public max time is the final I-frame, so trailing P-frames
-    // beyond that bound are intentionally outside the advisor's scan.
-    assert.strictEqual(result.log.sampleCount, 9377);
-    assert.ok(result.log.sampleRateHz > 490 && result.log.sampleRateHz < 510);
-    assert.strictEqual(result.quality.corruptFrames, 0);
+    assert.strictEqual(result.range.startTimeUs, selectedRange.startTimeUs);
+    assert.strictEqual(result.range.endTimeUs, selectedRange.endTimeUs);
+    assert.strictEqual(result.range.durationUs, 12000000);
+    assert.ok(result.range.sampleCount > 5000 && result.range.sampleCount < 7000);
+    assert.ok(result.range.sampleRateHz > 490 && result.range.sampleRateHz < 510);
+    assert.ok(result.range.sampleCount < 9377, "Only the selected subset may be scanned");
+    assert.strictEqual(result.quality.corruptFrames, null);
     assert.strictEqual(result.quality.discontinuities, 0);
-    assert.strictEqual(result.quality.missingEndMarker, false);
+    assert.strictEqual(result.quality.missingEndMarker, null);
     assert.strictEqual(result.tracking.status, "available");
     assert.deepStrictEqual(
         result.tracking.axes.map(function(axis) { return axis.axis; }),
@@ -354,8 +454,43 @@ async function assertRotorflightFixture() {
     assert.ok(result.governor.targetRpm > 0);
     assert.ok(result.governor.rmseRpm >= 0);
     assert.ok(result.evidence.length > 0);
+    result.evidence.forEach(function(item) {
+        if (!Array.isArray(item.timeRangeUs)) {
+            return;
+        }
+        assert.ok(
+            item.timeRangeUs[0] >= selectedRange.startTimeUs,
+            "Evidence must not begin before the selected In marker"
+        );
+        assert.ok(
+            item.timeRangeUs[1] <= selectedRange.endTimeUs,
+            "Evidence must not end after the selected Out marker"
+        );
+    });
     assert.ok(result.findings.some(function(item) {
-        return item.id === "governor-prerequisites-required";
+        return item.id === "governor-prerequisites-required"
+            || item.id === "governor-targeted-log-needed";
+    }));
+
+    const fullSelectedResult = await engine.analyzeFlightLog(flightLog, {
+        timeRangeUs: {
+            startTimeUs: logMinTimeUs,
+            endTimeUs: logMaxTimeUs
+        },
+        isCancelled: function() { return false; }
+    });
+    assert.strictEqual(
+        fullSelectedResult.quality.missingEndMarker,
+        null,
+        "A trailing end event outside the graph-selectable time domain must not create a false warning"
+    );
+    assert.strictEqual(
+        fullSelectedResult.quality.corruptFrames,
+        null,
+        "Untimestamped whole-file corruption counts must not leak into selected-range evidence"
+    );
+    assert.ok(!fullSelectedResult.findings.some(function(item) {
+        return item.id === "missing-end-marker";
     }));
     assert.ok(progress.some(function(item) { return item.phase === "quality"; }));
     assert.ok(progress.some(function(item) { return item.phase === "tracking"; }));
@@ -375,6 +510,7 @@ module.exports = (async function main() {
     assertGovernorRequiresExplicitActiveState();
     assertV1WithholdsSettingDirections();
     await assertCancellation();
+    await assertGapBoundaryScoping();
     await assertRotorflightFixture();
     console.log("Tune Advisor tests passed: deterministic rules and Rotorflight fixture evidence");
 }());

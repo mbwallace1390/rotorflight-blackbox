@@ -473,30 +473,90 @@ function BlackboxLogViewer() {
         syncLogToVideo();
     }
 
+    function getSelectedAnalysisRange() {
+        if (!flightLog
+                || !Number.isFinite(videoExportInTime)
+                || !Number.isFinite(videoExportOutTime)
+                || videoExportInTime >= videoExportOutTime) {
+            return null;
+        }
+
+        var logMinTimeUs = flightLog.getMinTime();
+        var logMaxTimeUs = flightLog.getMaxTime();
+        if (videoExportInTime < logMinTimeUs || videoExportOutTime > logMaxTimeUs) {
+            return null;
+        }
+
+        return {
+            startTimeUs: videoExportInTime,
+            endTimeUs: videoExportOutTime
+        };
+    }
+
+    function notifyAnalysisRangeChanged() {
+        var logStartTimeUs = flightLog ? flightLog.getMinTime() : 0;
+        $(document).trigger("rotorlens:analysis-range-change", [{
+            inTimeUs: Number.isFinite(videoExportInTime) ? videoExportInTime : null,
+            outTimeUs: Number.isFinite(videoExportOutTime) ? videoExportOutTime : null,
+            inOffsetUs: Number.isFinite(videoExportInTime) ? videoExportInTime - logStartTimeUs : null,
+            outOffsetUs: Number.isFinite(videoExportOutTime) ? videoExportOutTime - logStartTimeUs : null,
+            range: getSelectedAnalysisRange()
+        }]);
+    }
+
+    function syncGraphAnalysisRange() {
+        if (!graph) {
+            return;
+        }
+
+        if (Number.isFinite(videoExportInTime) && Number.isFinite(videoExportOutTime)) {
+            graph.setInTime(videoExportInTime);
+            graph.setOutTime(videoExportOutTime);
+        } else if (Number.isFinite(videoExportInTime)) {
+            graph.setOutTime(false);
+            graph.setInTime(videoExportInTime);
+        } else if (Number.isFinite(videoExportOutTime)) {
+            graph.setInTime(false);
+            graph.setOutTime(videoExportOutTime);
+        } else {
+            graph.setInTime(false);
+            graph.setOutTime(false);
+        }
+        invalidateGraph();
+    }
+
     function setVideoInTime(inTime) {
-        videoExportInTime = inTime;
+        videoExportInTime = Number.isFinite(inTime) ? inTime : false;
+        if (Number.isFinite(videoExportInTime)
+                && Number.isFinite(videoExportOutTime)
+                && videoExportOutTime <= videoExportInTime) {
+            videoExportOutTime = false;
+        }
 
         if (seekBar) {
             seekBar.setInTime(videoExportInTime);
-        }
-
-        if (graph) {
-            graph.setInTime(videoExportInTime);
-            invalidateGraph();
-        }
-    }
-
-    function setVideoOutTime(outTime) {
-        videoExportOutTime = outTime;
-
-        if (seekBar) {
             seekBar.setOutTime(videoExportOutTime);
         }
 
-        if (graph) {
-            graph.setOutTime(videoExportOutTime);
-            invalidateGraph();
+        syncGraphAnalysisRange();
+        notifyAnalysisRangeChanged();
+    }
+
+    function setVideoOutTime(outTime) {
+        videoExportOutTime = Number.isFinite(outTime) ? outTime : false;
+        if (Number.isFinite(videoExportInTime)
+                && Number.isFinite(videoExportOutTime)
+                && videoExportInTime >= videoExportOutTime) {
+            videoExportInTime = false;
         }
+
+        if (seekBar) {
+            seekBar.setInTime(videoExportInTime);
+            seekBar.setOutTime(videoExportOutTime);
+        }
+
+        syncGraphAnalysisRange();
+        notifyAnalysisRangeChanged();
     }
 
     function setPlaybackRate(rate, updateUi) {
@@ -567,6 +627,7 @@ function BlackboxLogViewer() {
         window.RotorLensTuneAdvisorUI.setCurrentLog(flightLog, {
             fileName: currentOffsetCache.log || $(".log-filename").text() || "Blackbox log",
             logIndex: flightLog.getLogIndex(),
+            getSelectedRange: getSelectedAnalysisRange,
             focusTime: function(timeUs) {
                 if (!Number.isFinite(timeUs)) {
                     return false;

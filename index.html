@@ -231,7 +231,7 @@
                             </a>
                         </li>
                         <li>
-                            <a href="#" class="open-tune-advisor auto-hide-menu disabled" aria-disabled="true" data-toggle="tooltip" title="Analyze the current log on this device">
+                            <a href="#" class="open-tune-advisor auto-hide-menu disabled" aria-disabled="true" data-toggle="tooltip" title="Analyze the selected graph In/Out range on this device">
                                 <span class="glyphicon glyphicon-dashboard"></span> Tune Advisor
                             </a>
                         </li>
@@ -270,7 +270,7 @@
                     <button type="button" class="btn btn-default view-table" data-toggle="tooltip" title="View table">
                         <span class="glyphicon glyphicon-list-alt"></span>
                     </button>
-                    <button type="button" class="btn btn-default open-tune-advisor" disabled aria-label="Open Tune Advisor" data-toggle="tooltip" title="Analyze the current log on this device">
+                    <button type="button" class="btn btn-default open-tune-advisor" disabled aria-label="Open Tune Advisor" data-toggle="tooltip" title="Analyze the selected graph In/Out range on this device">
                         <span class="glyphicon glyphicon-dashboard"></span>
                     </button>
                 </div>
@@ -641,12 +641,12 @@
                     <p class="tune-advisor-kicker">ON-DEVICE · DETERMINISTIC</p>
                     <h4 class="modal-title" id="tune-advisor-title">Tune Advisor</h4>
                     <p class="tune-advisor-description" id="tune-advisor-description">
-                        Measures this log locally and explains the evidence. It never changes flight-controller settings.
+                        Measures only the graph range between your In and Out markers. It never changes flight-controller settings.
                     </p>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-warning tune-advisor-safety" role="note">
-                        Treat every result as advisory. Land and inspect the helicopter whenever control, power, or mechanical safety is uncertain.
+                        Set both In and Out on the graph before analysis. Treat every result as advisory, and land to inspect whenever safety is uncertain.
                     </div>
 
                     <div class="tune-advisor-log-summary" aria-live="polite"></div>

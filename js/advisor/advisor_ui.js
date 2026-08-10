@@ -100,6 +100,47 @@
         return minutes + " min " + formatNumber(seconds % 60, 0) + " s";
     }
 
+    function readSelectedRange() {
+        if (!currentContext || typeof currentContext.getSelectedRange !== "function") {
+            return null;
+        }
+
+        var range = currentContext.getSelectedRange();
+        if (!range
+                || !isFiniteNumber(range.startTimeUs)
+                || !isFiniteNumber(range.endTimeUs)
+                || range.startTimeUs >= range.endTimeUs) {
+            return null;
+        }
+
+        return {
+            startTimeUs: range.startTimeUs,
+            endTimeUs: range.endTimeUs
+        };
+    }
+
+    function rangesEqual(left, right) {
+        return Boolean(left && right
+            && left.startTimeUs === right.startTimeUs
+            && left.endTimeUs === right.endTimeUs);
+    }
+
+    function rangeLabel(range, logStartTimeUs) {
+        if (!range
+                || !isFiniteNumber(range.startTimeUs)
+                || !isFiniteNumber(range.endTimeUs)
+                || range.startTimeUs >= range.endTimeUs) {
+            return "Set both graph In and Out markers";
+        }
+
+        var origin = isFiniteNumber(logStartTimeUs) ? logStartTimeUs : 0;
+        var startSeconds = Math.max(0, range.startTimeUs - origin) / 1000000;
+        var endSeconds = Math.max(0, range.endTimeUs - origin) / 1000000;
+        return "Selected I " + formatNumber(startSeconds, 1)
+            + " s → O " + formatNumber(endSeconds, 1)
+            + " s (" + formatDuration(range.endTimeUs - range.startTimeUs) + ")";
+    }
+
     function humanizeMetric(value) {
         return String(value || "Measurement")
             .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -134,10 +175,13 @@
         if (Number.isInteger(currentContext.logIndex)) {
             append(logSummary[0], element("span", null, "Embedded log " + (currentContext.logIndex + 1)));
         }
+        var pendingRange = readSelectedRange();
+        var pendingLogStart = typeof currentLog.getMinTime === "function" ? currentLog.getMinTime() : 0;
+        append(logSummary[0], element("span", null, rangeLabel(pendingRange, pendingLogStart)));
         append(logSummary[0], element("span", null, "Analysis stays inside this viewer"));
     }
 
-    function renderAnalyzedLogSummary(log) {
+    function renderAnalyzedLogSummary(log, range) {
         if (!logSummary || !logSummary.length) {
             return;
         }
@@ -153,10 +197,13 @@
                 append(logSummary[0], element("span", null, firmware));
             }
             if (isFiniteNumber(log.durationUs)) {
-                append(logSummary[0], element("span", null, formatDuration(log.durationUs)));
+                append(logSummary[0], element("span", null, "Full log " + formatDuration(log.durationUs)));
             }
-            if (isFiniteNumber(log.sampleRateHz)) {
-                append(logSummary[0], element("span", null, formatNumber(log.sampleRateHz, 1) + " Hz log rate"));
+        }
+        if (range) {
+            append(logSummary[0], element("span", null, rangeLabel(range, log && log.startTimeUs)));
+            if (isFiniteNumber(range.sampleRateHz)) {
+                append(logSummary[0], element("span", null, formatNumber(range.sampleRateHz, 1) + " Hz selected rate"));
             }
         }
     }
@@ -197,7 +244,7 @@
         results.attr("hidden", true);
         errorBox.text(message || "Tune Advisor could not analyze this log.");
         errorBox.removeAttr("hidden");
-        rerunButton.prop("disabled", !currentLog);
+        rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
         modal.attr("aria-busy", "false");
     }
 
@@ -214,7 +261,7 @@
         overallStatus.removeClass("status-pass status-caution status-blocked").empty();
         progressContainer.removeAttr("hidden");
         setProgress(currentLog ? "Ready to analyze this log." : "Open a log to begin.", 0);
-        rerunButton.prop("disabled", true);
+        rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
         modal.attr("aria-busy", "false");
     }
 
@@ -262,11 +309,14 @@
         measurementsContainer.empty();
 
         var log = evidencePackage.log || {};
+        var range = evidencePackage.range || {};
         var quality = evidencePackage.quality || {};
-        var sampleCount = isFiniteNumber(log.sampleCount) ? log.sampleCount : quality.sampleCount;
-        var sampleRateHz = isFiniteNumber(log.sampleRateHz) ? log.sampleRateHz : quality.sampleRateHz;
-        append(measurementsContainer[0], measurementCard("Log", null, [
-            { label: "Duration", value: formatDuration(log.durationUs) },
+        var sampleCount = isFiniteNumber(range.sampleCount) ? range.sampleCount : quality.sampleCount;
+        var sampleRateHz = isFiniteNumber(range.sampleRateHz) ? range.sampleRateHz : quality.sampleRateHz;
+        append(measurementsContainer[0], measurementCard("Selected graph range", null, [
+            { label: "In", value: formatDuration(range.startOffsetUs) },
+            { label: "Out", value: formatDuration(range.endOffsetUs) },
+            { label: "Duration", value: formatDuration(range.durationUs) },
             { label: "Samples", value: formatNumber(sampleCount, 0) },
             { label: "Sample rate", value: isFiniteNumber(sampleRateHz) ? formatNumber(sampleRateHz, 1) + " Hz" : "—" }
         ]));
@@ -588,7 +638,7 @@
     }
 
     function renderResults(evidencePackage) {
-        renderAnalyzedLogSummary(evidencePackage.log || {});
+        renderAnalyzedLogSummary(evidencePackage.log || {}, evidencePackage.range || null);
         findingsContainer.empty();
 
         var evidenceById = {};
@@ -650,7 +700,13 @@
             showError("Open a Blackbox log before running Tune Advisor.");
             return;
         }
-        if (!force && currentPackage) {
+        var selectedRange = readSelectedRange();
+        if (!selectedRange) {
+            currentPackage = null;
+            showError("Set both graph In and Out markers, with In before Out, then run Tune Advisor again.");
+            return;
+        }
+        if (!force && currentPackage && rangesEqual(currentPackage.range, selectedRange)) {
             renderResults(currentPackage);
             return;
         }
@@ -666,7 +722,8 @@
         var job = {
             cancelled: false,
             generation: generation,
-            log: currentLog
+            log: currentLog,
+            range: selectedRange
         };
         activeJob = job;
 
@@ -679,8 +736,12 @@
 
         Promise.resolve().then(function() {
             return engine.analyzeFlightLog(job.log, {
+                timeRangeUs: job.range,
                 isCancelled: function() {
-                    return job.cancelled || job.generation !== generation || job.log !== currentLog;
+                    return job.cancelled
+                        || job.generation !== generation
+                        || job.log !== currentLog
+                        || !rangesEqual(readSelectedRange(), job.range);
                 },
                 onProgress: function(progress) {
                     if (job.cancelled || activeJob !== job) {
@@ -692,6 +753,11 @@
             });
         }).then(function(evidencePackage) {
             if (job.cancelled || activeJob !== job || job.generation !== generation || job.log !== currentLog) {
+                return;
+            }
+            if (!rangesEqual(readSelectedRange(), job.range)) {
+                activeJob = null;
+                showError("The graph In/Out range changed. Run Tune Advisor again for the new selection.");
                 return;
             }
             activeJob = null;
@@ -706,6 +772,11 @@
             }
             if (activeJob === job) {
                 activeJob = null;
+            }
+            if (error && error.code === "ANALYSIS_CANCELLED"
+                    && !rangesEqual(readSelectedRange(), job.range)) {
+                showError("The graph In/Out range changed. Run Tune Advisor again for the new selection.");
+                return;
             }
             showError(error && error.message
                 ? "Tune Advisor could not analyze this log: " + error.message
@@ -755,6 +826,16 @@
 
         rerunButton.on("click.rotorLensTuneAdvisor", function() {
             startAnalysis(true);
+        });
+
+        $(document).on("rotorlens:analysis-range-change.rotorLensTuneAdvisor", function() {
+            generation++;
+            cancelActiveJob();
+            currentPackage = null;
+            resetPresentation();
+            if (modal.hasClass("in") && readSelectedRange()) {
+                startAnalysis(true);
+            }
         });
 
         modal.on("hidden.bs.modal.rotorLensTuneAdvisor", function() {
