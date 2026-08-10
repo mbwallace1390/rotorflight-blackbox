@@ -33,7 +33,7 @@ function applyPlatformStyles() {
     var root = document.documentElement;
 
     if (RotorflightPlatform.mobile) {
-        var androidAssetVersion = "111";
+        var androidAssetVersion = "113";
         root.classList.add("platform-mobile");
         root.classList.add(RotorflightPlatform.android ? "platform-android" : "platform-ios");
 

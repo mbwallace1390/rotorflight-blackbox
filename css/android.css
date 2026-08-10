@@ -335,6 +335,98 @@ html.platform-android .file-open {
         margin-bottom: 8px;
     }
 
+    /* Log header: the desktop sheet uses two 50% columns inside a 954px
+     * minimum-width dialog. On a phone that squeezes six-column parameter
+     * tables into roughly half the viewport, causing labels and values to
+     * overlap. Stack the columns and contain any genuinely wide table inside
+     * its own box so the whole dialog never drifts off-screen. */
+    html.platform-android .header-dialog .modal-body {
+        overflow-x: hidden;
+    }
+
+    html.platform-android .header-dialog .modal-header .close {
+        min-width: 44px;
+        margin-top: -4px;
+    }
+
+    html.platform-android .header-dialog .modal-header h5 {
+        margin-top: 5px;
+        margin-bottom: 5px;
+        line-height: 1.3;
+    }
+
+    html.platform-android .header-dialog #pid-tuning,
+    html.platform-android .header-dialog .cf_column,
+    html.platform-android .header-dialog .cf_column.half,
+    html.platform-android .header-dialog .cf_column.left,
+    html.platform-android .header-dialog .cf_column.right {
+        float: none !important;
+        box-sizing: border-box;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    html.platform-android .header-dialog .spacer_left,
+    html.platform-android .header-dialog .spacer_right {
+        float: none !important;
+        box-sizing: border-box;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    html.platform-android .header-dialog .gui_box {
+        float: none;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        margin: 0 0 12px;
+        overflow-x: hidden;
+    }
+
+    html.platform-android .header-dialog .gui_box_titlebar {
+        float: none;
+        box-sizing: border-box;
+        height: auto;
+        min-height: 32px;
+    }
+
+    html.platform-android .header-dialog table {
+        max-width: 100%;
+    }
+
+    html.platform-android .header-dialog .spacer_box > table.pid_tuning {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    html.platform-android .header-dialog .spacer_box > table.pid_tuning > tbody {
+        display: table;
+        width: 640px;
+        min-width: 640px;
+        table-layout: fixed;
+    }
+
+    html.platform-android .header-dialog .spacer_box > table.pid_tuning th {
+        box-sizing: border-box;
+        padding-right: 4px;
+        padding-left: 4px;
+    }
+
+    html.platform-android .header-dialog table th,
+    html.platform-android .header-dialog table td,
+    html.platform-android .header-dialog .parameter label,
+    html.platform-android .header-dialog .modal-header h4,
+    html.platform-android .header-dialog .modal-header h5 {
+        overflow-wrap: anywhere;
+    }
+
     /* Graph setup: keep the complete desktop editor, but make the field
      * settings table explicitly swipeable instead of clipping its columns. */
     html.platform-android .graph-configuration-dialog .config-graphs-list {

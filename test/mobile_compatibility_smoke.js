@@ -104,6 +104,27 @@ function assertMobileGraphDropdownSupport() {
     );
 }
 
+function assertMobileHeaderDialogLayout() {
+    const androidStyles = source("css/android.css");
+
+    assert.ok(
+        androidStyles.includes("html.platform-android .header-dialog .cf_column.half"),
+        "Mobile log-header layout must override its desktop half-width columns"
+    );
+    assert.ok(
+        androidStyles.includes("html.platform-android .header-dialog .spacer_right"),
+        "Mobile log-header layout must remove its desktop column spacers"
+    );
+    assert.ok(
+        androidStyles.includes("html.platform-android .header-dialog .gui_box"),
+        "Mobile log-header parameter boxes must contain their wide tables"
+    );
+    assert.ok(
+        androidStyles.includes("overflow-wrap: anywhere"),
+        "Mobile log-header labels must wrap instead of overlapping adjacent values"
+    );
+}
+
 function assertSpectrumRangeCap() {
     const context = vm.createContext({});
 
@@ -122,6 +143,7 @@ function assertSpectrumRangeCap() {
 assertMobileAssetURLs();
 assertNativeOpenSeam();
 assertMobileGraphDropdownSupport();
+assertMobileHeaderDialogLayout();
 assertSpectrumRangeCap();
 
 console.log("Mobile compatibility smoke tests passed: hosted assets and analyser range cap");
