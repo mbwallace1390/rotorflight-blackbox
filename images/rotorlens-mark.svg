@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">RotorLens rotor and signal mark</title>
+  <rect width="128" height="128" rx="28" fill="#101820"/>
+  <circle cx="64" cy="60" r="38" fill="none" stroke="#3B4A52" stroke-width="4"/>
+  <path d="M15 75h30l9-14 13 25 12-19 9 8h25" fill="none" stroke="#2CB5A0" stroke-linecap="round" stroke-linejoin="round" stroke-width="6"/>
+  <path d="M20 50L108 70" fill="none" stroke="#F4F0E6" stroke-linecap="round" stroke-width="7"/>
+  <path d="M56 21L72 99" fill="none" stroke="#66747B" stroke-linecap="round" stroke-width="5"/>
+  <circle cx="64" cy="60" r="8" fill="#F2A900" stroke="#101820" stroke-width="4"/>
+</svg>

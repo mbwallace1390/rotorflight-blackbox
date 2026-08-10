@@ -29,3 +29,7 @@ Makefile text eol=lf
 *.txt text eol=lf
 *.sh text eol=lf
 *.config text eol=lf
+
+# Blackbox logs may use .TXT while containing binary frame data. Preserve the
+# licensed fixture byte-for-byte instead of applying the generic text filter.
+test/fixtures/third-party/propwash/LOG246.TXT -text -diff

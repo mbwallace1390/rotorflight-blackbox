@@ -1,4 +1,4 @@
-package org.rotorflight.blackbox;
+package io.github.mbwallace1390.rotorlens.legacy;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -113,6 +113,7 @@ public final class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        // Keep the legacy marker because the bundled viewer uses it for platform detection.
         settings.setUserAgentString(
             settings.getUserAgentString()
                 + " RotorflightBlackboxAndroid/"

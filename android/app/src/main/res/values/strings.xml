@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rotorflight Blackbox</string>
+    <string name="app_name">RotorLens Legacy Viewer</string>
     <string name="no_document_picker">No document picker is available on this device.</string>
     <string name="no_external_app">No app is available to open this link.</string>
 </resources>

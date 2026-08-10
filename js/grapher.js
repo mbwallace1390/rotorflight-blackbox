@@ -498,11 +498,45 @@ function FlightLogGrapher(flightLog, graphConfig, canvas, stickCanvas, craftWrap
         if (label) {
             var
                 margin = 8,
-                labelWidth = canvasContext.measureText(label).width + 2 * margin;
+                measuredLabelWidth = canvasContext.measureText(label).width,
+                naturalLabelWidth = measuredLabelWidth + width + 2 * margin,
+                rightSpace = Math.max(0, canvas.width - x),
+                leftSpace = Math.max(0, x),
+                requestedAlign = align;
 
-            align = align || 'left'
+            align = align || (rightSpace >= naturalLabelWidth || rightSpace >= leftSpace ? 'left' : 'right');
+            if (requestedAlign) {
+                var requestedSpace = align == 'left' ? rightSpace : leftSpace;
+                var oppositeSpace = align == 'left' ? leftSpace : rightSpace;
+                if (requestedSpace < naturalLabelWidth && oppositeSpace > requestedSpace) {
+                    align = align == 'left' ? 'right' : 'left';
+                }
+            }
+
             canvasContext.textAlign = align;
             var labelDirection = (align=='left')?1:-1;
+            var availableSpace = labelDirection == 1 ? rightSpace : leftSpace;
+            var labelWidth = Math.min(naturalLabelWidth, availableSpace);
+            var maxTextWidth = Math.max(0, labelWidth - width - 2 * margin);
+            var visibleLabel = label;
+
+            if (measuredLabelWidth > maxTextWidth) {
+                var ellipsis = "\u2026";
+                var low = 0;
+                var high = label.length;
+
+                while (low < high) {
+                    var midpoint = Math.ceil((low + high) / 2);
+                    var candidate = label.slice(0, midpoint) + ellipsis;
+                    if (canvasContext.measureText(candidate).width <= maxTextWidth) {
+                        low = midpoint;
+                    } else {
+                        high = midpoint - 1;
+                    }
+                }
+
+                visibleLabel = low > 0 ? label.slice(0, low) + ellipsis : "";
+            }
 
             canvasContext.lineWidth = 1;
             canvasContext.beginPath();
@@ -520,7 +554,7 @@ function FlightLogGrapher(flightLog, graphConfig, canvas, stickCanvas, craftWrap
             canvasContext.fillStyle = labelColor || "rgba(200,200,200,0.9)";
             canvasContext.closePath();
 
-            canvasContext.fillText(label, x + labelDirection * (width + 8), labelY);
+            canvasContext.fillText(visibleLabel, x + labelDirection * (width + margin), labelY);
 
         }
     }

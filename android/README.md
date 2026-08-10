@@ -1,12 +1,14 @@
-# Rotorflight Blackbox Android MVP
+# RotorLens Legacy Viewer
 
-This directory contains the first Android shell for Rotorflight Blackbox Explorer.
-It reuses the existing HTML, JavaScript parser, graph renderer, and workspaces from
-the repository root instead of creating a second Blackbox decoder.
+This directory contains the original Android WebView shell for RotorLens. It is a
+legacy implementation retained for testing and comparison; new mobile work lives
+under `mobile/`. The shell embeds the GPL Rotorflight Blackbox Explorer HTML,
+JavaScript parser, graph renderer, and workspaces from the repository root instead
+of creating a second Blackbox decoder.
 
-## Current milestone
+## Legacy milestone
 
-The MVP currently provides:
+The legacy wrapper provides:
 
 - a native Android application shell
 - secure loading of bundled web content through `WebViewAssetLoader`
@@ -21,8 +23,10 @@ The MVP currently provides:
 The desktop-only NW.js update dialog, secondary-window button, and export buttons
 are disabled in the Android shell for now.
 
-Android test APK builds use one pull-request-scoped signing cache. Consecutive
-builds must restore the same certificate before an APK is distributed for testing.
+Android test APKs use the checked-in public development key shared with the
+React Native preview. This keeps test builds repeatable, but it is not a
+production signing identity. The distinct `.legacy` package ID allows both apps
+to remain installed together.
 
 ## Requirements
 
@@ -33,7 +37,7 @@ builds must restore the same certificate before an APK is distributed for testin
 
 ## Build from Android Studio
 
-1. Clone the repository and check out `android-mvp`.
+1. Clone the repository and check out the branch you want to test.
 2. In the repository root, install the existing web dependencies:
 
    ```shell
@@ -59,7 +63,7 @@ back into itself.
 4. Confirm that the flight list and main graph appear.
 5. Rotate the phone to landscape and confirm that the selected log remains open.
 
-## Known MVP limitations
+## Known legacy limitations
 
 - The desktop graph controls have only basic mobile layout adjustments.
 - Pinch-to-zoom and native touch scrubbing still need a dedicated gesture layer.
@@ -68,7 +72,10 @@ back into itself.
 - Opening a log by tapping it in another Android app is not implemented yet.
 - Very large logs still parse on the WebView main JavaScript thread.
 
-## Next planned steps
+## Migration guidance
+
+Implement these improvements in the React Native app under `mobile/` instead of
+extending this legacy wrapper:
 
 1. Add touch scrubbing and pinch zoom.
 2. Add an Android-first graph setup panel.

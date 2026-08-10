@@ -1,0 +1,196 @@
+name: Mobile
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile.yml"
+      - "_locales/**"
+      - "changelog.html"
+      - "css/**"
+      - "docs/mobile-architecture.md"
+      - "images/**"
+      - "index.html"
+      - "index.js"
+      - "js/**"
+      - "locales/**"
+      - "manifest.json"
+      - "mobile/**"
+      - "package.json"
+      - "resources/**"
+      - "test/**"
+      - "yarn.lock"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-code:
+    name: Shared JavaScript
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up desktop Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "16.20.2"
+
+      - name: Test parser and hosted assets
+        run: npm test
+
+      - name: Set up mobile Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "mobile/.nvmrc"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Test React Native shell
+        working-directory: mobile
+        run: npm test -- --runInBand
+
+      - name: Lint React Native shell
+        working-directory: mobile
+        run: npm run lint
+
+      - name: Type-check React Native shell
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+  android:
+    name: Android preview build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up desktop Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "16.20.2"
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Enable Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install viewer dependencies
+        run: yarn install --frozen-lockfile --production=true
+
+      - name: Set up mobile Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "mobile/.nvmrc"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install canonical Android development signing key
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.android"
+          cp mobile/android/app/debug.keystore "$HOME/.android/debug.keystore"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android toolchain
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build standalone Android preview APK
+        working-directory: mobile/android
+        run: bash ./gradlew assemblePreview --stacktrace
+
+      - name: Upload Android preview APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rotorflight-blackbox-mobile-android-preview
+          path: mobile/android/app/build/outputs/apk/preview/app-preview.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS simulator build
+    runs-on: macos-15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up desktop Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "16.20.2"
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Enable Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install viewer dependencies
+        run: yarn install --frozen-lockfile --production=true
+
+      - name: Set up mobile Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "mobile/.nvmrc"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Set up Ruby and Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: mobile
+
+      - name: Install iOS pods
+        working-directory: mobile
+        run: bundle exec pod install --project-directory=ios
+
+      - name: Build iOS app for Simulator
+        working-directory: mobile
+        run: >-
+          xcodebuild
+          -workspace ios/RotorflightBlackbox.xcworkspace
+          -scheme RotorflightBlackbox
+          -configuration Debug
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          COMPILER_INDEX_STORE_ENABLE=NO
+          build

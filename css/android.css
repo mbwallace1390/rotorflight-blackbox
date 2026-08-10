@@ -14,7 +14,28 @@ html.platform-android body {
 
 html.platform-android body {
     -webkit-tap-highlight-color: transparent;
+    background: #101820;
     touch-action: manipulation;
+}
+
+html.platform-mobile .navbar-inverse {
+    background: #101820;
+    border-color: #3b4a52;
+}
+
+html.platform-mobile .navbar-logo img,
+html.platform-mobile.isBF .navbar-logo img,
+html.platform-mobile.isCF .navbar-logo img,
+html.platform-mobile.isINAV .navbar-logo img,
+html.platform-mobile.isRF .navbar-logo img {
+    content: url("../images/rotorlens-logo.svg");
+}
+
+html.platform-mobile .btn-primary {
+    background: #f2a900;
+    border-color: #d99100;
+    color: #101820;
+    text-shadow: none;
 }
 
 html.platform-android input,
@@ -57,22 +78,98 @@ html.platform-android .file-open {
 }
 
 @media (max-width: 900px) {
+    html.platform-android {
+        --mobile-navbar-height: 60px;
+        --mobile-toolbar-height: 56px;
+    }
+
     html.platform-android .main-pane {
         padding-right: 0;
         padding-left: 0;
     }
 
     html.platform-android .navbar {
+        min-height: var(--mobile-navbar-height);
         margin-bottom: 0;
     }
 
-    html.platform-android .navbar-brand {
-        max-width: calc(100vw - 80px);
+    /* Replace the desktop header's absolute logo/filename positioning with a
+     * bounded row. The filename can now shrink and ellipsize before it reaches
+     * the 44px navigation target instead of continuing beyond the viewport. */
+    html.platform-android .navbar-header,
+    html.platform-android .navbar-logo {
+        width: 100%;
+        min-width: 0;
+        min-height: var(--mobile-navbar-height);
     }
 
-    html.platform-android .video-top-controls {
+    html.platform-android .navbar-toggle {
+        position: absolute !important;
+        top: 8px !important;
+        right: 12px !important;
+        z-index: 560;
+        float: none;
+        margin: 0;
+    }
+
+    html.platform-android .navbar-logo {
+        position: relative !important;
+        left: auto !important;
         display: flex;
+        align-items: center;
+        gap: 10px;
+        box-sizing: border-box;
+        padding: 4px 66px 4px 0 !important;
+    }
+
+    html.platform-android .navbar-logo > div {
+        flex: 0 1 46vw;
+        min-width: 128px;
+        max-width: 220px;
+    }
+
+    html.platform-android .navbar-logo img.navbar-brand {
+        position: static;
+        float: none;
+        display: block;
+        width: 100% !important;
+        max-width: 100%;
+        height: auto !important;
+        max-height: 34px;
+        margin: 0 !important;
+        padding: 0;
+        object-fit: contain;
+        object-position: left center;
+    }
+
+    html.platform-android .navbar-logo > div > span {
+        display: none;
+    }
+
+    html.platform-android .navbar-logo .log-filename {
+        position: static !important;
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto !important;
+        max-width: none;
+        height: auto;
+        padding: 0 !important;
+        overflow: hidden;
+        line-height: 20px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    html.platform-android.has-video .video-top-controls,
+    html.platform-android.has-log .video-top-controls {
+        display: flex;
+        top: var(--mobile-navbar-height) !important;
+        box-sizing: border-box;
         width: 100%;
+        min-width: 0 !important;
+        max-width: 100vw;
+        height: var(--mobile-toolbar-height) !important;
+        min-height: var(--mobile-toolbar-height);
         margin: 0;
         padding: 6px;
         gap: 6px;
@@ -84,6 +181,14 @@ html.platform-android .file-open {
 
     html.platform-android .video-top-controls > li {
         flex: 0 0 auto;
+    }
+
+    /* main.css positions the graph for its 30px desktop toolbar. Keep it below
+     * the complete 44px touch targets used by the mobile toolbar. */
+    html.platform-android.has-video .graph-row,
+    html.platform-android.has-log .graph-row,
+    html.platform-android.has-table-overlay .log-field-values {
+        top: calc(var(--mobile-navbar-height) + var(--mobile-toolbar-height)) !important;
     }
 
     html.platform-android .log-field-values,

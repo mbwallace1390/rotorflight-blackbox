@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">RotorLens</string>
+    <string name="no_document_picker">No document picker is available on this device.</string>
+    <string name="no_external_app">No app is available to open this link.</string>
+    <string name="import_storage_error">Unable to create Blackbox log storage.</string>
+    <string name="import_copy_error">Unable to copy the selected Blackbox log.</string>
+    <string name="import_empty_error">The selected Blackbox log was empty.</string>
+    <string name="log_imported">Blackbox log is ready.</string>
+</resources>

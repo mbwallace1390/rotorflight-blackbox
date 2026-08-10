@@ -1,7 +1,7 @@
 {
   "name": "rotorflight-blackbox",
-  "displayName": "Rotorflight Blackbox",
-  "description": "Crossplatform blackbox analytics tool for Rotorflight flight control system.",
+  "displayName": "RotorLens",
+  "description": "Unofficial cross-platform flight-log viewer compatible with Rotorflight.",
   "version": "0.0.0",
   "main": "index.html",
   "chromium-args": "--disable-features=nw2",
@@ -9,20 +9,24 @@
   "scripts": {
     "start": "gulp debug",
     "gulp": "gulp",
-    "release": "gulp release"
+    "release": "gulp release",
+    "test": "node test/run.js"
   },
   "window": {
     "id": "main",
     "show": true,
-    "icon": "images/rf_icon_128.png",
+    "icon": "images/rotorlens_icon_128.png",
     "min_width": 740,
     "min_height": 480
   },
   "repository": {
     "type": "git",
-    "url": "github.com/rotorflight/rotorflight-blackbox"
+    "url": "https://github.com/mbwallace1390/rotorflight-blackbox.git"
   },
-  "author": "The Rotorflight open source project.",
+  "author": "Rotorflight Blackbox contributors",
+  "contributors": [
+    "Michael Wallace (mobile adaptation and original additions)"
+  ],
   "license": "GPL-3.0",
   "dependencies": {
     "bootstrap": "~3.4.1",

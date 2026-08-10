@@ -24,7 +24,7 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
 
         dataReload = false,
         fftData = null,
-        isAndroid = Boolean(window.RotorflightPlatform && window.RotorflightPlatform.android),
+        isAndroid = Boolean(window.RotorflightPlatform && window.RotorflightPlatform.mobile),
         prefs = new PrefStorage();
 
     try {
@@ -365,7 +365,12 @@ function FlightLogAnalyser(flightLog, canvas, analyserCanvas) {
         };
 
         this.draw = function() {
-            GraphSpectrumPlot.draw();
+            // Resizing/fullscreen setup happens before a field is selected.
+            // Do not ask the plotter to read FFT metadata until dataLoad has
+            // produced a spectrum for the first visible graph field.
+            if (fftData) {
+                GraphSpectrumPlot.draw();
+            }
         };
 
         $(analyserCanvas).on("mousemove", function(e) {

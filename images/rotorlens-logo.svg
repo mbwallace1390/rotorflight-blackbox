@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 84" role="img" aria-labelledby="title">
+  <title id="title">RotorLens</title>
+  <g transform="translate(4 2)">
+    <circle cx="40" cy="38" r="29" fill="none" stroke="#66747B" stroke-width="3"/>
+    <path d="M4 50h20l8-11 11 20 10-15 8 6h17" fill="none" stroke="#2CB5A0" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
+    <path d="M6 30L74 46" fill="none" stroke="#F4F0E6" stroke-linecap="round" stroke-width="5"/>
+    <path d="M34 8L46 68" fill="none" stroke="#66747B" stroke-linecap="round" stroke-width="4"/>
+    <circle cx="40" cy="38" r="6" fill="#F2A900" stroke="#101820" stroke-width="3"/>
+  </g>
+  <text x="96" y="47" fill="#F4F0E6" font-family="Arial Narrow, Arial, sans-serif" font-size="39" font-weight="700" letter-spacing="4">ROTORLENS</text>
+  <text x="99" y="70" fill="#AAB4B8" font-family="Consolas, monospace" font-size="11" letter-spacing="3">FLIGHT LOG INSTRUMENTS</text>
+</svg>

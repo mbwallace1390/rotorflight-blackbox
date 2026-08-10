@@ -319,7 +319,7 @@ function BlackboxLogViewer() {
     }
 
     function renderLogFileInfo(file) {
-        $(".log-filename").text(file.name);
+        $(".log-filename").text(file.name).attr("title", file.name);
 
         var
             logIndexContainer = $(".log-index"),
@@ -640,7 +640,24 @@ function BlackboxLogViewer() {
         $("#loading-file-text").show();
     }
 
-    function loadFiles(files) {
+    var fileOpenGeneration = 0;
+
+    function beginFileOpen(options) {
+        var generation = ++fileOpenGeneration;
+
+        return {
+            isCurrent: function() {
+                return generation === fileOpenGeneration;
+            },
+            rejectErrors: Boolean(options && options.rejectErrors),
+        };
+    }
+
+    window.RotorflightBlackboxBeginFileOpen = beginFileOpen;
+
+    function loadFiles(files, openContext) {
+        var pendingLoads = [];
+
         for (var i = 0; i < files.length; i++) {
             var
                 isLog = files[i].name.match(/\.(BBL|TXT|CFL|BFL|LOG)$/i),
@@ -657,7 +674,11 @@ function BlackboxLogViewer() {
             }
 
             if (isLog) {
-                loadLogFile(files[i]);
+                // Direct multi-select is deterministic: the final selected log
+                // wins even if earlier FileReaders finish later. Videos and
+                // workspaces do not reserve generations or cancel a log.
+                var logOpenContext = openContext || beginFileOpen();
+                pendingLoads.push(loadLogFile(files[i], logOpenContext));
             } else if (isVideo) {
                 loadVideo(files[i]);
             } else if (isWorkspaces) {
@@ -674,73 +695,141 @@ function BlackboxLogViewer() {
                     setVideoOffset(offsetCache[i].offset, true);
                 }
         }
+
+        return Promise.all(pendingLoads).then(function(results) {
+            return results.every(function(result) { return result !== false; });
+        });
     }
 
-    function loadLogFile(file) {
-        var reader = new FileReader();
+    // Native mobile hosts use a tokenized, same-origin URL for cached logs.
+    // Keep the browser File boundary intact so the existing parser path is
+    // identical for desktop, Android, and iOS.
+    window.RotorflightBlackboxOpenFiles = loadFiles;
+    if (typeof window.openRotorflightSharedFile !== "function") {
+        window.openRotorflightSharedFile = function(url, fileName) {
+            loadFileMessage(fileName);
 
-        reader.onload = function(e) {
-            var bytes = e.target.result;
-
-            var fileContents = String.fromCharCode.apply(null, new Uint8Array(bytes, 0,100));
-
-            if(fileContents.match(/# dump|# diff/i)) { // this is actually a configuration file
-                try{
-
-                   // Firstly, is this a configuration defaults file
-                   // (the filename contains the word 'default')
-
-                   if( (file.name).match(/default/i) ) {
-                        configurationDefaults.loadFile(file);
-                   } else {
-
-                       configuration = new Configuration(file, configurationDefaults, showConfigFile); // the configuration class will actually re-open the file as a text object.
-                       hasConfig = true;
-                       html.toggleClass("has-config", hasConfig);
-                   }
-
-                   } catch(e) {
-                       configuration = null;
-                       hasConfig = false;
-                   }
-               return;
-            }
-
-            flightLogDataArray = new Uint8Array(bytes);
-
-            try {
-                flightLog = new FlightLog(flightLogDataArray);
-            } catch (err) {
-                alert("Sorry, an error occured while trying to open this log:\n\n" + err);
-                return;
-            }
-
-            renderLogFileInfo(file);
-            currentOffsetCache.log      = file.name; // store the name of the loaded log file
-            currentOffsetCache.index    = null;      // and clear the index
-
-            document.title = file.name + ' - Rotorflight Blackbox';
-
-            hasLog = true; html.toggleClass("has-log", hasLog);
-            html.toggleClass("has-table", hasTable);
-            html.toggleClass("has-craft",              userSettings.drawCraft);
-            html.toggleClass("has-sticks",             userSettings.drawSticks);
-            html.toggleClass('has-expo-override',      userSettings.graphExpoOverride);
-            html.toggleClass('has-smoothing-override', userSettings.graphSmoothOverride);
-            html.toggleClass('has-grid-override',      userSettings.graphSmoothOverride);
-
-            setTimeout(function(){$(window).resize();}, 500 ); // refresh the window size;
-
-            selectLog(null);
-
-            if (graph) {
-                (hasAnalyserFullscreen)?html.addClass("has-analyser-fullscreen"):html.removeClass("has-analyser-fullscreen");
-                graph.setAnalyser(hasAnalyserFullscreen);
-            }
-
+            return fetch(url, { cache: "no-store" })
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error("HTTP " + response.status);
+                    }
+                    return response.blob();
+                })
+                .then(function(blob) {
+                    return loadFiles([
+                        new File([blob], fileName, {
+                            type: blob.type || "application/octet-stream"
+                        })
+                    ]);
+                })
+                .catch(function(error) {
+                    $("#loading-file-text").hide();
+                    console.error("Unable to open the cached Blackbox log", error);
+                    alert("Unable to open the selected Blackbox log.");
+                    throw error;
+                });
         };
+    }
 
-        reader.readAsArrayBuffer(file);
+    function loadLogFile(file, openContext) {
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+
+            reader.onerror = function() {
+                var error = reader.error || new Error("Unable to read the selected Blackbox log");
+                if (openContext.rejectErrors) {
+                    reject(error);
+                } else {
+                    alert("Sorry, an error occured while trying to read this log:\n\n" + error);
+                    resolve(false);
+                }
+            };
+
+            reader.onload = function(e) {
+                if (!openContext.isCurrent()) {
+                    resolve(false);
+                    return;
+                }
+
+                try {
+                    var bytes = e.target.result;
+
+                var fileContents = String.fromCharCode.apply(null, new Uint8Array(bytes, 0,100));
+
+                if(fileContents.match(/# dump|# diff/i)) { // this is actually a configuration file
+                    try{
+
+                       // Firstly, is this a configuration defaults file
+                       // (the filename contains the word 'default')
+
+                       if( (file.name).match(/default/i) ) {
+                            configurationDefaults.loadFile(file);
+                       } else {
+
+                           configuration = new Configuration(file, configurationDefaults, showConfigFile); // the configuration class will actually re-open the file as a text object.
+                           hasConfig = true;
+                           html.toggleClass("has-config", hasConfig);
+                       }
+
+                       } catch(e) {
+                           configuration = null;
+                           hasConfig = false;
+                       }
+                    resolve(true);
+                    return;
+                }
+
+                flightLogDataArray = new Uint8Array(bytes);
+
+                try {
+                    flightLog = new FlightLog(flightLogDataArray);
+                } catch (err) {
+                    if (!openContext.rejectErrors) {
+                        alert("Sorry, an error occured while trying to open this log:\n\n" + err);
+                        resolve(false);
+                    } else {
+                        reject(err);
+                    }
+                    return;
+                }
+
+                renderLogFileInfo(file);
+                currentOffsetCache.log      = file.name; // store the name of the loaded log file
+                currentOffsetCache.index    = null;      // and clear the index
+
+                document.title = file.name + ' - RotorLens';
+
+                hasLog = true; html.toggleClass("has-log", hasLog);
+                html.toggleClass("has-table", hasTable);
+                html.toggleClass("has-craft",              userSettings.drawCraft);
+                html.toggleClass("has-sticks",             userSettings.drawSticks);
+                html.toggleClass('has-expo-override',      userSettings.graphExpoOverride);
+                html.toggleClass('has-smoothing-override', userSettings.graphSmoothOverride);
+                html.toggleClass('has-grid-override',      userSettings.graphSmoothOverride);
+
+                setTimeout(function(){$(window).resize();}, 500 ); // refresh the window size;
+
+                selectLog(null);
+
+                if (graph) {
+                    (hasAnalyserFullscreen)?html.addClass("has-analyser-fullscreen"):html.removeClass("has-analyser-fullscreen");
+                    graph.setAnalyser(hasAnalyserFullscreen);
+                }
+
+                    resolve(true);
+                } catch (err) {
+                    if (openContext.rejectErrors) {
+                        reject(err);
+                    } else {
+                        alert("Sorry, an error occured while trying to open this log:\n\n" + err);
+                        resolve(false);
+                    }
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
     }
 
     function loadVideo(file) {
@@ -1044,7 +1133,10 @@ function BlackboxLogViewer() {
         onSwitchWorkspace(workspaceGraphConfigs, workspaceSelection);
 
         prefs.get('log-legend-hidden', function(item) {
-            if (item) {
+            // Preserve the full graph width on a fresh phone install. Once the
+            // user explicitly opens the graph panel, the stored false value
+            // keeps that choice on later launches.
+            if (item || (item === null && RotorflightPlatform.mobile)) {
                 graphLegend.hide();
             }
         });

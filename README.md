@@ -1,4 +1,21 @@
-# Rotorflight Blackbox
+# RotorLens
+
+**RotorLens** is an unofficial mobile flight-log viewer compatible with
+Rotorflight. It is not affiliated with or endorsed by the Rotorflight project.
+
+The Android and iOS adaptation in [`mobile/`](mobile/) is based on
+[Rotorflight Blackbox Explorer](https://github.com/rotorflight/rotorflight-blackbox),
+which is distributed under the GNU General Public License v3.0. Original
+copyright remains with the Rotorflight, Betaflight, Cleanflight, and other
+contributors. Mobile adaptation and original additions are Copyright 2026
+Michael Wallace. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md), and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+RotorLens is still in preview. Logs are selected with the native system picker
+and analyzed locally on the device. The public repository contains the source,
+lockfiles, and build scripts needed to reproduce distributed preview binaries.
+
+## Upstream project background
 
 [Rotorflight](https://github.com/rotorflight) is a Flight Control software suite designed for
 single-rotor helicopters. It consists of:
@@ -22,7 +39,9 @@ Tutorials, documentation, and flight videos can be found on the [Rotorflight web
 
 ## Installation
 
-Please download the latest version from [github](https://github.com/rotorflight/rotorflight-blackbox/releases/).
+Mobile preview builds will be published from this repository once the release
+checklist is complete. For the official desktop viewer, download the latest
+[Rotorflight Blackbox release](https://github.com/rotorflight/rotorflight-blackbox/releases/).
 
 
 ## Features

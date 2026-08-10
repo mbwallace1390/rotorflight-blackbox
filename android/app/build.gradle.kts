@@ -30,6 +30,10 @@ val syncWebAssets by tasks.registering(Sync::class) {
         include("index.js")
         include("changelog.html")
         include("manifest.json")
+        include("LICENSE")
+        include("NOTICE.md")
+        include("THIRD_PARTY_NOTICES.md")
+        include("legal/**")
         include("css/**")
         include("images/**")
         include("js/**")
@@ -46,22 +50,30 @@ val syncWebAssets by tasks.registering(Sync::class) {
     into(generatedWebAssets)
 
     doFirst {
-        val bootstrapCss = webRoot.resolve("node_modules/bootstrap/dist/css/bootstrap.min.css")
-        if (!bootstrapCss.isFile) {
+        val requiredFiles = listOf(
+            "LICENSE",
+            "NOTICE.md",
+            "THIRD_PARTY_NOTICES.md",
+            "legal/APACHE-2.0.txt",
+            "node_modules/bootstrap/dist/css/bootstrap.min.css"
+        )
+        val missingFiles = requiredFiles.filterNot { webRoot.resolve(it).isFile }
+        if (missingFiles.isNotEmpty()) {
             throw GradleException(
-                "Blackbox web dependencies are missing. Run 'yarn install' or 'npm install' " +
-                    "in the repository root before building Android."
+                "Required Blackbox assets are missing: ${missingFiles.joinToString()}. " +
+                    "Run 'yarn install' or 'npm install' in the repository root if a " +
+                    "viewer dependency is missing."
             )
         }
     }
 }
 
 android {
-    namespace = "org.rotorflight.blackbox"
+    namespace = "io.github.mbwallace1390.rotorlens.legacy"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "org.rotorflight.blackbox"
+        applicationId = "io.github.mbwallace1390.rotorlens.legacy"
         minSdk = 24
         targetSdk = 36
         versionCode = gitCommitCount

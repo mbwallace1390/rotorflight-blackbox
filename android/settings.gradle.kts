@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RotorflightBlackboxAndroid"
+rootProject.name = "RotorLensLegacyViewer"
 include(":app")

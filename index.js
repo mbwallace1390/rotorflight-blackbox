@@ -16,10 +16,14 @@ function detectPlatform() {
     var userAgent = window.navigator.userAgent || "";
     var isNwJs = typeof process !== "undefined"
         && process.versions
-        && Boolean(process.versions.nw);
+        && Boolean(process.versions.nw),
+        isAndroid = userAgent.indexOf("RotorflightBlackboxAndroid/") !== -1,
+        isIos = userAgent.indexOf("RotorflightBlackboxIOS/") !== -1;
 
     return {
-        android: userAgent.indexOf("RotorflightBlackboxAndroid/") !== -1,
+        android: isAndroid,
+        ios: isIos,
+        mobile: isAndroid || isIos,
         nwjs: isNwJs,
         browser: !isNwJs,
     };
@@ -28,8 +32,13 @@ function detectPlatform() {
 function applyPlatformStyles() {
     var root = document.documentElement;
 
-    if (RotorflightPlatform.android) {
-        var androidAssetVersion = "106";
+    if (RotorflightPlatform.mobile) {
+        var androidAssetVersion = "111";
+        root.classList.add("platform-mobile");
+        root.classList.add(RotorflightPlatform.android ? "platform-android" : "platform-ios");
+
+        // The existing mobile viewer stylesheet retains its historical class
+        // name while Android and iOS converge on the same touch layout.
         root.classList.add("platform-android");
         root.setAttribute("data-android-layout-version", androidAssetVersion);
 
@@ -55,7 +64,7 @@ function applyPlatformStyles() {
 }
 
 function installAndroidControlFallbacks() {
-    if (!RotorflightPlatform.android) {
+    if (!RotorflightPlatform.mobile) {
         return;
     }
 
@@ -247,7 +256,10 @@ function installAndroidControlFallbacks() {
     function openDropdown(toggle) {
         closeOverlay();
 
-        var dropdown = closest(toggle, ".dropdown");
+        // Bootstrap also supports dropdown menus inside a .btn-group. The
+        // graph configurator uses that form, so limiting this lookup to
+        // .dropdown swallowed the touch without ever opening its menu.
+        var dropdown = closest(toggle, ".dropdown, .btn-group");
         if (!dropdown) {
             return;
         }
@@ -340,7 +352,7 @@ function installAndroidControlFallbacks() {
 }
 
 function installAndroidSharedFileBridge() {
-    if (!RotorflightPlatform.android) {
+    if (!RotorflightPlatform.mobile) {
         return;
     }
 
@@ -350,11 +362,10 @@ function installAndroidSharedFileBridge() {
         });
     }
 
-    async function deliverFileToViewer(file) {
+    async function deliverFileToViewer(file, openContext) {
         for (var attempt = 0; attempt < 100; attempt++) {
             if (typeof window.RotorflightBlackboxOpenFiles === "function") {
-                window.RotorflightBlackboxOpenFiles([file]);
-                return;
+                return window.RotorflightBlackboxOpenFiles([file], openContext);
             }
 
             await sleep(100);
@@ -364,6 +375,10 @@ function installAndroidSharedFileBridge() {
     }
 
     window.openRotorflightSharedFile = async function (url, fileName) {
+        var openContext = window.RotorflightBlackboxBeginFileOpen({
+            rejectErrors: true,
+        });
+
         try {
             var response = await fetch(url, { cache: "no-store" });
             if (!response.ok) {
@@ -376,10 +391,17 @@ function installAndroidSharedFileBridge() {
                 lastModified: Date.now(),
             });
 
-            await deliverFileToViewer(file);
+            if (!openContext.isCurrent()) {
+                return false;
+            }
+
+            return await deliverFileToViewer(file, openContext);
         } catch (error) {
-            console.error("Unable to open Android-shared Blackbox log", error);
-            alert("Unable to open the shared Blackbox log: " + error.message);
+            console.error("Unable to open mobile-shared Blackbox log", error);
+            if (!RotorflightPlatform.ios) {
+                alert("Unable to open the shared Blackbox log: " + error.message);
+            }
+            throw error;
         }
     };
 }

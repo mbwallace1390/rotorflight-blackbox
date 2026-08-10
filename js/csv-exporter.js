@@ -26,7 +26,7 @@ let CsvExporter = function(flightLog, opts={}) {
     function dump(success) {
         let frames = _(flightLog.getChunksInTimeRange(flightLog.getMinTime(), flightLog.getMaxTime()))
                 .map(chunk => chunk.frames).value(),
-            worker = new Worker("/js/webworkers/csv-export-worker.js");
+            worker = new Worker("js/webworkers/csv-export-worker.js");
 
         worker.onmessage = event => {
             success(event.data);

@@ -7,7 +7,7 @@
  * controls and handles clicks on those controls.
  */
 (function () {
-    if (!window.RotorflightPlatform || !window.RotorflightPlatform.android) {
+    if (!window.RotorflightPlatform || !window.RotorflightPlatform.mobile) {
         return;
     }
 

@@ -35,7 +35,7 @@ class Craft3D {
     this.scene.add(this.modelWrapper);
 
     const loader = new THREE.GLTFLoader();
-    loader.load("/resources/models/bell_cw.gltf", (gltf) => {
+    loader.load("resources/models/bell_cw.gltf", (gltf) => {
       this.model = gltf.scene;
       this.modelWrapper.add(this.model);
       this.render();

@@ -1,7 +1,7 @@
-name: Android MVP
+name: RotorLens Legacy Android
 
-# Build test APKs from one event/ref so the development signing cache has one
-# stable lineage. Branch-push and pull-request caches are intentionally not mixed.
+# The legacy and React Native previews use the same checked-in public development
+# key for repeatable test builds. Their distinct package IDs let them coexist.
 on:
   workflow_dispatch:
   pull_request:
@@ -13,13 +13,14 @@ on:
       - "js/graph_spectrum.js"
       - "js/localization.js"
       - "js/pref_storage.js"
+      - "mobile/android/app/debug.keystore"
       - ".github/workflows/android-mvp.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: rotorflight-blackbox-android-signing-v4
+  group: rotorlens-legacy-android-signing-v1
   cancel-in-progress: false
 
 jobs:
@@ -52,32 +53,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore Android test signing key
-        id: signing-key-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: rotorflight-blackbox-android-debug-signing-v4
-
-      - name: Create or verify Android test signing key
+      - name: Install canonical Android development signing key
         shell: bash
         run: |
           mkdir -p "$HOME/.android"
-          echo "cache-hit=${{ steps.signing-key-cache.outputs.cache-hit }}" > android-signing-cache.txt
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            echo "generated-new-key=true" >> android-signing-cache.txt
-            keytool -genkeypair \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Rotorflight Android Debug,O=Rotorflight,C=US" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000
-          else
-            echo "generated-new-key=false" >> android-signing-cache.txt
-          fi
+          cp mobile/android/app/debug.keystore "$HOME/.android/debug.keystore"
+          echo "source=mobile/android/app/debug.keystore" > android-signing-source.txt
           keytool -list -v \
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android \
@@ -107,10 +88,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rotorflight-blackbox-android-build-log
+          name: rotorlens-legacy-android-build-log
           path: |
             android-build.log
-            android-signing-cache.txt
+            android-signing-source.txt
             android-signing-certificate.txt
           if-no-files-found: error
 
@@ -118,7 +99,7 @@ jobs:
         if: steps.android-build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: rotorflight-blackbox-android-debug
+          name: rotorlens-legacy-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 

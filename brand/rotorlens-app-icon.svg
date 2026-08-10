@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">RotorLens app icon</title>
+  <rect width="1024" height="1024" fill="#101820"/>
+  <path d="M0 740L1024 504V1024H0Z" fill="#17242C"/>
+  <circle cx="512" cy="474" r="300" fill="none" stroke="#3B4A52" stroke-width="34"/>
+  <path d="M124 600h210l72-112 108 201 102-154 68 65h216" fill="none" stroke="#2CB5A0" stroke-linecap="round" stroke-linejoin="round" stroke-width="48"/>
+  <path d="M150 387L874 560" fill="none" stroke="#F4F0E6" stroke-linecap="round" stroke-width="64"/>
+  <path d="M451 164L573 786" fill="none" stroke="#66747B" stroke-linecap="round" stroke-width="46"/>
+  <circle cx="512" cy="474" r="67" fill="#F2A900" stroke="#101820" stroke-width="34"/>
+</svg>
