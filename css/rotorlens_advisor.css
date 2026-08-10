@@ -1,0 +1,366 @@
+.open-tune-advisor.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.tune-advisor-dialog .modal-content {
+    overflow: hidden;
+}
+
+.tune-advisor-dialog .modal-header,
+.tune-advisor-dialog .modal-footer {
+    background: #f7f8f9;
+}
+
+.tune-advisor-dialog .modal-header {
+    border-bottom-color: #d8dde1;
+    padding: 18px 22px 16px;
+}
+
+.tune-advisor-dialog .modal-header .close {
+    min-height: 44px;
+    min-width: 44px;
+}
+
+.tune-advisor-dialog .modal-title {
+    color: #17232d;
+    font-size: 25px;
+    font-weight: 700;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-kicker {
+    color: #9a6700;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    margin: 0 0 5px;
+}
+
+.tune-advisor-description {
+    color: #586773;
+    line-height: 1.45;
+    margin: 7px 42px 0 0;
+    max-width: 700px;
+}
+
+.tune-advisor-dialog .modal-body {
+    max-height: calc(100vh - 210px);
+    overflow-y: auto;
+    padding: 20px 22px 24px;
+}
+
+.tune-advisor-safety {
+    border-left: 4px solid #d99a00;
+    margin-bottom: 18px;
+}
+
+.tune-advisor-log-summary {
+    align-items: baseline;
+    border-bottom: 1px solid #e1e5e8;
+    color: #596874;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 12px;
+    gap: 5px 16px;
+    margin-bottom: 17px;
+    padding-bottom: 12px;
+}
+
+.tune-advisor-log-summary strong {
+    color: #1c2a34;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-progress-label {
+    color: #3f4f5b;
+    font-size: 13px;
+    margin-bottom: 7px;
+}
+
+.tune-advisor-progress .progress {
+    height: 8px;
+    margin-bottom: 18px;
+}
+
+.tune-advisor-progress .progress-bar {
+    background-color: #0b7fa3;
+    min-width: 0;
+    transition: width 120ms linear;
+}
+
+.tune-advisor-results[hidden],
+.tune-advisor-error[hidden] {
+    display: none !important;
+}
+
+.tune-advisor-section + .tune-advisor-section {
+    border-top: 1px solid #dfe4e8;
+    margin-top: 24px;
+    padding-top: 21px;
+}
+
+.tune-advisor-section-heading {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.tune-advisor-section-heading h5 {
+    color: #17232d;
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.tune-advisor-overall-status {
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.tune-advisor-overall-status.status-pass {
+    background-color: #377b4b;
+}
+
+.tune-advisor-overall-status.status-caution {
+    background-color: #a66b00;
+}
+
+.tune-advisor-overall-status.status-blocked {
+    background-color: #a83b32;
+}
+
+.tune-advisor-finding {
+    border: 1px solid #dce2e6;
+    border-left-width: 5px;
+    border-radius: 3px;
+    box-shadow: none;
+    margin-bottom: 12px;
+}
+
+.tune-advisor-finding.severity-info {
+    border-left-color: #2f7fa0;
+}
+
+.tune-advisor-finding.severity-caution {
+    border-left-color: #d28b00;
+}
+
+.tune-advisor-finding.severity-stop {
+    border-left-color: #b13d34;
+}
+
+.tune-advisor-finding .panel-body {
+    padding: 15px 16px;
+}
+
+.tune-advisor-finding-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.tune-advisor-finding h6 {
+    color: #16232d;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-severity {
+    flex: 0 0 auto;
+    font-size: 9px;
+    letter-spacing: 0.65px;
+    margin-top: 1px;
+    text-transform: uppercase;
+}
+
+.tune-advisor-severity.severity-info {
+    background-color: #2f7fa0;
+}
+
+.tune-advisor-severity.severity-caution {
+    background-color: #a66b00;
+}
+
+.tune-advisor-severity.severity-stop {
+    background-color: #a83b32;
+}
+
+.tune-advisor-summary,
+.tune-advisor-action {
+    color: #44535f;
+    line-height: 1.5;
+    margin: 9px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-action {
+    background: #f4f7f8;
+    border-radius: 3px;
+    color: #263640;
+    padding: 9px 11px;
+}
+
+.tune-advisor-action strong {
+    color: #17232d;
+}
+
+.tune-advisor-evidence-list {
+    color: #677580;
+    font-size: 11px;
+    line-height: 1.45;
+    margin: 10px 0 0;
+    padding-left: 18px;
+}
+
+.tune-advisor-evidence-list li + li {
+    margin-top: 3px;
+}
+
+.tune-advisor-focus {
+    margin-top: 11px;
+}
+
+.tune-advisor-guidance {
+    color: #086a91;
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 11px;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-guidance::after {
+    content: " \2197";
+}
+
+.tune-advisor-measurement-column {
+    margin-bottom: 12px;
+}
+
+.tune-advisor-measurement-card {
+    background: #f8f9fa;
+    border: 1px solid #dce2e6;
+    border-radius: 3px;
+    height: 100%;
+    min-height: 132px;
+    padding: 13px 14px;
+}
+
+.tune-advisor-measurement-card h6 {
+    color: #182630;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 0 9px;
+}
+
+.tune-advisor-measurement-status {
+    color: #63717b;
+    font-size: 11px;
+    margin-bottom: 8px;
+    text-transform: capitalize;
+}
+
+.tune-advisor-metric-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.tune-advisor-metric-list li {
+    align-items: baseline;
+    color: #53626d;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    line-height: 1.4;
+    padding: 2px 0;
+}
+
+.tune-advisor-metric-list strong {
+    color: #1d2b35;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.tune-advisor-empty {
+    background: #f7f8f9;
+    border: 1px dashed #cdd5da;
+    color: #5e6d77;
+    padding: 18px;
+    text-align: center;
+}
+
+@media (max-width: 767px) {
+    .tune-advisor-dialog .modal-header {
+        padding: 13px 14px 11px;
+    }
+
+    .tune-advisor-dialog .modal-title {
+        font-size: 21px;
+    }
+
+    .tune-advisor-description {
+        font-size: 12px;
+        margin-right: 32px;
+    }
+
+    .tune-advisor-dialog .modal-body {
+        max-height: none;
+        padding: 12px 12px 18px;
+    }
+
+    .tune-advisor-dialog .modal-footer .btn,
+    .tune-advisor-focus {
+        min-height: 44px;
+    }
+
+    .tune-advisor-safety {
+        font-size: 12px;
+        margin-bottom: 13px;
+        padding: 9px 10px;
+    }
+
+    .tune-advisor-log-summary {
+        display: block;
+    }
+
+    .tune-advisor-log-summary span {
+        display: block;
+        margin-top: 4px;
+    }
+
+    .tune-advisor-finding-header {
+        display: block;
+    }
+
+    .tune-advisor-section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .tune-advisor-overall-status {
+        display: inline-block;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    .tune-advisor-severity {
+        display: inline-block;
+        margin-top: 7px;
+    }
+
+    .tune-advisor-measurement-card {
+        min-height: 0;
+    }
+}

@@ -559,6 +559,30 @@ function BlackboxLogViewer() {
         updateValuesChart();
     }
 
+    function updateTuneAdvisorCurrentLog() {
+        if (!window.RotorLensTuneAdvisorUI || !flightLog) {
+            return;
+        }
+
+        window.RotorLensTuneAdvisorUI.setCurrentLog(flightLog, {
+            fileName: currentOffsetCache.log || $(".log-filename").text() || "Blackbox log",
+            logIndex: flightLog.getLogIndex(),
+            focusTime: function(timeUs) {
+                if (!Number.isFinite(timeUs)) {
+                    return false;
+                }
+
+                var targetTime = Math.max(
+                    flightLog.getMinTime(),
+                    Math.min(flightLog.getMaxTime(), timeUs)
+                );
+                setGraphState(GRAPH_STATE_PAUSED);
+                setCurrentBlackboxTime(targetTime);
+                return true;
+            }
+        });
+    }
+
     /**
      * Set the index of the log from the log file that should be viewed. Pass "null" as the index to open the first
      * available log.
@@ -633,6 +657,7 @@ function BlackboxLogViewer() {
 
         setGraphState(GRAPH_STATE_PAUSED);
         setGraphZoomLevel(graphZoom, true);
+        updateTuneAdvisorCurrentLog();
     }
 
     function loadFileMessage(fileName) {
@@ -778,6 +803,10 @@ function BlackboxLogViewer() {
                        }
                     resolve(true);
                     return;
+                }
+
+                if (window.RotorLensTuneAdvisorUI) {
+                    window.RotorLensTuneAdvisorUI.setCurrentLog(null);
                 }
 
                 flightLogDataArray = new Uint8Array(bytes);
