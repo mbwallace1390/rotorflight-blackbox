@@ -419,6 +419,17 @@ html.platform-android .file-open {
         padding-left: 4px;
     }
 
+    html.platform-android .header-dialog td[name="rates_type"] {
+        width: 20% !important;
+    }
+
+    html.platform-android .header-dialog td[name="rates_type"] select {
+        width: calc(100% - 4px);
+        padding-right: 2px;
+        padding-left: 2px;
+        font-size: 14px;
+    }
+
     html.platform-android .header-dialog table th,
     html.platform-android .header-dialog table td,
     html.platform-android .header-dialog .parameter label,
