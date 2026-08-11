@@ -273,6 +273,7 @@ var FlightLogParser = function(logData) {
             yaw_deadband:null,                      // Yaw Deadband
             gyro_lpf:null,                          // Gyro lpf setting.
             gyro_32khz_hardware_lpf:null,           // Gyro 32khz hardware lpf setting. (post BF3.4)
+            gyro_decimation_hz:null,                // Rotorflight gyro sample decimation frequency
             gyro_lowpass_hz:null,                   // Gyro Soft Lowpass Filter Hz
             gyro_lowpass_dyn_hz:[null, null],       // Gyro Soft Lowpass Dynamic Filter Min and Max Hz
             gyro_lowpass2_hz:null,                  // Gyro Soft Lowpass Filter Hz 2
@@ -683,6 +684,7 @@ var FlightLogParser = function(logData) {
             case "gyro_lpf":
             case "gyro_hardware_lpf":
             case "gyro_32khz_hardware_lpf":
+            case "gyro_decimation_hz":
             case "acc_lpf_hz":
             case "acc_hardware":
             case "baro_hardware":

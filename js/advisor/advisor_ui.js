@@ -24,6 +24,162 @@
     // Native bounds inference at 120s; leave reply-delivery headroom on slower phones.
     var AI_REQUEST_TIMEOUT_MS = 125000;
     var AI_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+    var TUNE_CENTER_VIEWS = Object.freeze(["home", "cyclic", "governor", "mechanical", "report"]);
+    var CYCLIC_AXES = Object.freeze(["roll", "pitch", "yaw"]);
+    var CYCLIC_TERMS = Object.freeze(["P", "I", "D"]);
+    var CYCLIC_CAPTURE_SLOTS = Object.freeze(["baseline", "test"]);
+    var CYCLIC_COMPARISON_METRICS = Object.freeze([
+        "trackingRmsDps",
+        "fastRingingRmsDps",
+        "slowOscillationRmsDps",
+        "rawNoiseStepRmsDps"
+    ]);
+    var CYCLIC_METRIC_LABELS = Object.freeze({
+        trackingRmsDps: "Tracking error",
+        fastRingingRmsDps: "Fast post-stop ringing",
+        slowOscillationRmsDps: "Slow post-stop oscillation",
+        rawNoiseStepRmsDps: "Raw-gyro step noise"
+    });
+    var CYCLIC_REASON_MESSAGES = Object.freeze({
+        UNSUPPORTED_FIRMWARE: "Use an exact supported Rotorflight 4.6.0 stable-build log.",
+        UNVERIFIED_FIRMWARE_BUILD: "The exact supported Rotorflight 4.6.0 stable build could not be verified.",
+        FIRMWARE_BUILD_UNSUPPORTED: "Use an exact Rotorflight 4.6.0 stable build 118e912 log.",
+        FIRMWARE_IDENTITY_MISSING: "Firmware identity is incomplete in this capture.",
+        FIRMWARE_BUILD_MISMATCH: "Baseline and test use different firmware builds.",
+        CONFIGURATION_STATE_UNVERIFIED: "The active profile and gain state cannot be proven for this range.",
+        COMMAND_OR_GYRO_FIELDS_MISSING: "Setpoint or filtered-gyro fields are missing.",
+        RAW_GYRO_FIELDS_MISSING: "Unfiltered gyro evidence is required.",
+        RAW_GYRO_SOURCE_MISMATCH: "Baseline and test use different unfiltered-gyro sources.",
+        PID_TERM_FIELDS_MISSING: "Full logged P/I/D/F/B/O term evidence is required.",
+        PID_CONFIGURATION_MISSING_OR_INVALID: "The logged axis gains are missing or invalid.",
+        PID_CONFIGURATION_SHAPE_MISMATCH: "Baseline and test logged gain arrays are not comparable.",
+        MIXER_SATURATION_EVIDENCE_UNAVAILABLE: "Rotorflight 4.6 Blackbox does not include enough mixer and servo-limit configuration to rule out control saturation. Importing a matching configuration snapshot will be required before an outcome can be classified.",
+        PID_OUTPUT_SATURATION_IN_SELECTION: "PID output saturation was detected inside the selected maneuver.",
+        CONFIGURATION_CONTEXT_INVALID: "Required profile, rate, or filter context is missing or invalid.",
+        SAFETY_FIELDS_MISSING: "Required armed, flight-mode, failsafe, or receiver evidence is missing.",
+        SAFETY_SAMPLE_INVALID: "Safety-state samples are incomplete or invalid inside the selection.",
+        POWER_FIELDS_MISSING: "Required power or load evidence is missing.",
+        POWERED_COVERAGE_INSUFFICIENT: "The range does not contain enough continuously powered flight.",
+        BATTERY_SAMPLE_INVALID: "Battery evidence is missing or invalid inside the selection.",
+        BATTERY_FIELD_MISSING: "Battery-voltage evidence is missing.",
+        BATTERY_EVIDENCE_INVALID: "Battery evidence is incomplete or implausible inside the selection.",
+        HEADSPEED_FIELD_MISSING: "Head-speed evidence is missing.",
+        NO_SAMPLES_IN_SELECTION: "No samples were found inside the exact In/Out range.",
+        SAMPLE_RATE_BELOW_900_HZ: "Cyclic comparison requires at least 900 Hz measured logging.",
+        SELECTED_RANGE_COVERAGE_INSUFFICIENT: "Timestamp coverage is incomplete for the selected range.",
+        TIMING_P99_TOO_HIGH: "Logging timing is too irregular for a controlled comparison.",
+        FRAME_GAP_IN_SELECTION: "The selected range contains a logging gap.",
+        NON_MONOTONIC_TIMESTAMP_IN_SELECTION: "Timestamps are not strictly ordered in the selection.",
+        INVALID_TIMESTAMP_IN_CANDIDATE_CHUNK: "A candidate frame has an invalid timestamp.",
+        NONFINITE_SAMPLE_IN_SELECTION: "The selected evidence contains invalid numeric samples.",
+        INPUT_SAMPLE_LIMIT_EXCEEDED: "Select a shorter range; the bounded sample limit was reached.",
+        INSUFFICIENT_ISOLATED_STOPS: "Capture at least four clean, isolated stops: two in each axis direction.",
+        BIDIRECTIONAL_STOPS_REQUIRED: "Include controlled stops in both axis directions.",
+        STOP_DIRECTION_IMBALANCE: "Positive and negative stop counts are too imbalanced.",
+        STOP_EVENT_LIMIT_REACHED: "Too many stop candidates were found; select a shorter controlled range.",
+        COMMAND_RELEASE_NOT_SUSTAINED: "The command did not release cleanly enough to form a stop event.",
+        MIXED_AXIS_MANEUVER_IN_SELECTION: "Other-axis commands overlap the selected maneuver.",
+        OFF_AXIS_GYRO_RESPONSE_EXCESSIVE: "Off-axis response is too large for an isolated-axis comparison.",
+        HEADSPEED_EVIDENCE_MISSING: "Valid head-speed evidence is required.",
+        HEADSPEED_IMPLAUSIBLE_IN_SELECTION: "Head speed is outside the supported powered-flight range.",
+        HEADSPEED_SAMPLE_IMPLAUSIBLE: "Head-speed samples are outside the supported powered-flight range.",
+        HEADSPEED_UNSTABLE_IN_SELECTION: "Head speed varied too much during this capture.",
+        COLLECTIVE_LOAD_UNSTABLE_IN_SELECTION: "Collective or load varied too much during this capture.",
+        COLLECTIVE_FIELD_MISSING: "Collective/load evidence is missing.",
+        COLLECTIVE_EVIDENCE_INVALID: "Collective/load evidence is incomplete or implausible.",
+        COLLECTIVE_RANGE_CONFIGURATION_INVALID: "The logged collective-range configuration is missing or invalid.",
+        COLLECTIVE_SAMPLE_OUT_OF_RANGE: "Collective samples are outside the logged configured range.",
+        FAILSAFE_IN_SELECTION: "Failsafe evidence is present in the selection.",
+        RX_HEALTH_FAULT_IN_SELECTION: "Receiver-health evidence failed inside the selection.",
+        UNSAFE_FLIGHT_MODE_IN_SELECTION: "A self-level, rescue, fallback, or other unsupported mode is present.",
+        UNARMED_SAMPLE_IN_SELECTION: "Unarmed samples are present in the selected maneuver.",
+        DISARM_IN_SELECTION: "A disarm event occurred inside the selection.",
+        RESCUE_EVENT_IN_SELECTION: "A rescue event occurred inside the selection.",
+        INFLIGHT_ADJUSTMENT_IN_SELECTION: "A setting adjustment occurred inside the selection.",
+        PRESELECTION_INFLIGHT_ADJUSTMENT: "A setting or profile changed before In, so the log-start configuration cannot be trusted.",
+        PID_PROFILE_CHANGE_IN_SELECTION: "The PID profile changed inside the selection.",
+        LOGGING_RESUME_IN_SELECTION: "Logging resumed inside the selection.",
+        AIRBORNE_TRANSITION_IN_SELECTION: "Airborne state changed inside the selection.",
+        BASELINE_CAPTURE_INCONCLUSIVE: "The baseline capture did not pass every evidence gate.",
+        TEST_CAPTURE_INCONCLUSIVE: "The test capture did not pass every evidence gate.",
+        IDENTICAL_SELECTED_EVIDENCE: "Baseline and test are the same selected evidence.",
+        SELECTED_GAIN_UNCHANGED: "The selected axis gain did not change between captures.",
+        MULTIPLE_GAIN_CHANGES: "More than one logged gain changed between captures.",
+        CHANGED_GAIN_NOT_SELECTED: "The changed logged gain is not the selected axis and PID term.",
+        CONFIGURATION_CONTEXT_MISMATCH: "Profile, rate, filter, or other fixed context differs.",
+        AXIS_MISMATCH: "Baseline and test use different axes.",
+        TERM_MISMATCH: "Baseline and test use different PID terms.",
+        SAMPLE_RATE_MISMATCH: "Baseline and test logging rates are not comparable.",
+        RANGE_DURATION_MISMATCH: "Baseline and test range durations are not comparable.",
+        MANEUVER_AMPLITUDE_MISMATCH: "Command amplitudes differ too much between captures.",
+        MANEUVER_SIGN_MISMATCH: "Positive and negative stop evidence is missing, mismatched, or disagrees on the comparison outcome.",
+        MANEUVER_SIGN_COUNT_MISMATCH: "Positive and negative stop counts do not match between captures.",
+        STOP_COUNT_MISMATCH: "Baseline and test stop counts are not comparable.",
+        COMMAND_DURATION_MISMATCH: "Baseline and test command durations are not comparable.",
+        HEADSPEED_MISMATCH: "Baseline and test head speeds are not comparable.",
+        COLLECTIVE_LOAD_MISMATCH: "Baseline and test collective/load conditions are not comparable.",
+        COLLECTIVE_SOURCE_MISMATCH: "Baseline and test use different collective/load sources.",
+        BATTERY_LOAD_MISMATCH: "Baseline and test battery/load conditions are not comparable.",
+        I_TERM_HOLD_EVIDENCE_UNSUPPORTED: "I-term comparison needs a dedicated sustained-hold maneuver and is withheld in this release.",
+        YAW_DIRECTIONAL_EVIDENCE_UNSUPPORTED: "Yaw comparison needs separately validated clockwise and counter-clockwise evidence and is withheld in this release.",
+        SELECTED_TERM_EVIDENCE_UNCHANGED: "The selected logged PID-term evidence did not change measurably between captures.",
+        COMPARISON_METRIC_MISSING: "A required comparison metric is unavailable.",
+        CAPTURE_SCHEMA_INVALID: "Captured evidence failed its integrity check. Capture it again."
+    });
+    var CYCLIC_STOP_CODES = Object.freeze([
+        "FAILSAFE_IN_SELECTION",
+        "RX_HEALTH_FAULT_IN_SELECTION",
+        "UNSAFE_FLIGHT_MODE_IN_SELECTION",
+        "UNARMED_SAMPLE_IN_SELECTION",
+        "DISARM_IN_SELECTION",
+        "RESCUE_EVENT_IN_SELECTION",
+        "INFLIGHT_ADJUSTMENT_IN_SELECTION",
+        "PRESELECTION_INFLIGHT_ADJUSTMENT",
+        "PID_OUTPUT_SATURATION_IN_SELECTION",
+        "PID_PROFILE_CHANGE_IN_SELECTION"
+    ]);
+    var CYCLIC_CAUTION_CODES = Object.freeze([
+        "FIRMWARE_BUILD_UNSUPPORTED",
+        "UNSUPPORTED_FIRMWARE",
+        "UNVERIFIED_FIRMWARE_BUILD",
+        "CONFIGURATION_STATE_UNVERIFIED",
+        "COMMAND_OR_GYRO_FIELDS_MISSING",
+        "RAW_GYRO_FIELDS_MISSING",
+        "RAW_GYRO_SOURCE_MISMATCH",
+        "PID_TERM_FIELDS_MISSING",
+        "PID_CONFIGURATION_MISSING_OR_INVALID",
+        "MIXER_SATURATION_EVIDENCE_UNAVAILABLE",
+        "CONFIGURATION_CONTEXT_INVALID",
+        "SAFETY_FIELDS_MISSING",
+        "SAFETY_SAMPLE_INVALID",
+        "POWER_FIELDS_MISSING",
+        "POWERED_COVERAGE_INSUFFICIENT",
+        "BATTERY_SAMPLE_INVALID",
+        "BATTERY_FIELD_MISSING",
+        "BATTERY_EVIDENCE_INVALID",
+        "BATTERY_LOAD_MISMATCH",
+        "COLLECTIVE_FIELD_MISSING",
+        "COLLECTIVE_EVIDENCE_INVALID",
+        "COLLECTIVE_RANGE_CONFIGURATION_INVALID",
+        "COLLECTIVE_SAMPLE_OUT_OF_RANGE",
+        "COLLECTIVE_SOURCE_MISMATCH",
+        "HEADSPEED_EVIDENCE_MISSING",
+        "HEADSPEED_IMPLAUSIBLE_IN_SELECTION",
+        "HEADSPEED_SAMPLE_IMPLAUSIBLE",
+        "HEADSPEED_UNSTABLE_IN_SELECTION",
+        "OFF_AXIS_GYRO_RESPONSE_EXCESSIVE",
+        "AIRBORNE_TRANSITION_IN_SELECTION",
+        "NO_SAMPLES_IN_SELECTION",
+        "SAMPLE_RATE_BELOW_900_HZ",
+        "SELECTED_RANGE_COVERAGE_INSUFFICIENT",
+        "TIMING_P99_TOO_HIGH",
+        "FRAME_GAP_IN_SELECTION",
+        "NON_MONOTONIC_TIMESTAMP_IN_SELECTION",
+        "INVALID_TIMESTAMP_IN_CANDIDATE_CHUNK",
+        "NONFINITE_SAMPLE_IN_SELECTION",
+        "INPUT_SAMPLE_LIMIT_EXCEEDED",
+        "LOGGING_RESUME_IN_SELECTION"
+    ]);
     var AI_BINDING_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/;
     var AI_RESPONSE_TYPES = Object.freeze([
         "advisor.status.result",
@@ -161,6 +317,22 @@
     var aiBridgeBound = false;
     var aiModelReady = false;
     var aiCoachRetryKind = null;
+    var activeTuneCenterView = "home";
+    var cyclicSelection = { axis: "pitch", term: "P" };
+    // Presentation stores metadata only. Raw captures remain owned by the
+    // deterministic comparison engine and are never persisted here.
+    var cyclicCaptureMetadata = { baseline: null, test: null };
+    var cyclicCaptures = { baseline: null, test: null };
+    var cyclicComparisonState = null;
+    var activeCyclicCapture = null;
+    var tuneCenterAnalysisState = {
+        governor: null,
+        mechanical: null,
+        report: null
+    };
+    var cyclicIntegrationReady = false;
+    var analysisGlobalBlocker = null;
+    var cyclicGlobalBlocker = null;
 
     var modal;
     var logSummary;
@@ -189,6 +361,21 @@
     var aiCoachStatus;
     var aiCoachResult;
     var aiCoachAction;
+    var tuneCenterViews;
+    var tuneCenterModuleStatuses;
+    var tuneCenterEmptyStates;
+    var cyclicAxisInputs;
+    var cyclicTermInputs;
+    var cyclicCaptureButtons;
+    var cyclicClearButton;
+    var cyclicStatus;
+    var cyclicSlotStatuses;
+    var cyclicSlotSummaries;
+    var cyclicComparisonEvidence;
+    var cyclicComparisonStatus;
+    var cyclicComparisonSummary;
+    var cyclicComparisonMetrics;
+    var cyclicComparisonReasons;
 
     function cacheElements() {
         if (modal && modal.length) {
@@ -226,6 +413,21 @@
         aiCoachStatus = modal.find(".tune-advisor-ai-status");
         aiCoachResult = modal.find(".tune-advisor-ai-result");
         aiCoachAction = modal.find(".tune-advisor-ai-action");
+        tuneCenterViews = modal.find("[data-tune-center-view]");
+        tuneCenterModuleStatuses = modal.find("[data-tune-center-status]");
+        tuneCenterEmptyStates = modal.find("[data-tune-center-empty]");
+        cyclicAxisInputs = modal.find("input[name='tune-center-cyclic-axis']");
+        cyclicTermInputs = modal.find("input[name='tune-center-cyclic-term']");
+        cyclicCaptureButtons = modal.find("[data-cyclic-capture]");
+        cyclicClearButton = modal.find("[data-cyclic-clear]");
+        cyclicStatus = modal.find(".tune-center-cyclic-status");
+        cyclicSlotStatuses = modal.find("[data-cyclic-slot-status]");
+        cyclicSlotSummaries = modal.find("[data-cyclic-slot-summary]");
+        cyclicComparisonEvidence = modal.find("[data-cyclic-comparison-evidence]");
+        cyclicComparisonStatus = modal.find("[data-cyclic-comparison-status]");
+        cyclicComparisonSummary = modal.find("[data-cyclic-comparison-summary]");
+        cyclicComparisonMetrics = modal.find("[data-cyclic-comparison-metrics]");
+        cyclicComparisonReasons = modal.find("[data-cyclic-comparison-reasons]");
         return true;
     }
 
@@ -458,6 +660,348 @@
             startTimeUs: range.startTimeUs,
             endTimeUs: range.endTimeUs
         };
+    }
+
+    function canonicalTuneCenterView(value) {
+        return TUNE_CENTER_VIEWS.indexOf(value) >= 0 ? value : "home";
+    }
+
+    function canonicalCyclicSelection(axis, term) {
+        var normalizedAxis = typeof axis === "string" ? axis.toLowerCase() : "";
+        var normalizedTerm = typeof term === "string" ? term.toUpperCase() : "";
+        if (CYCLIC_AXES.indexOf(normalizedAxis) < 0
+                || CYCLIC_TERMS.indexOf(normalizedTerm) < 0) {
+            return null;
+        }
+        return Object.freeze({ axis: normalizedAxis, term: normalizedTerm });
+    }
+
+    function canonicalCyclicSlot(value) {
+        return CYCLIC_CAPTURE_SLOTS.indexOf(value) >= 0 ? value : null;
+    }
+
+    function cyclicSessionState() {
+        return {
+            selection: canonicalCyclicSelection(cyclicSelection.axis, cyclicSelection.term),
+            baseline: cyclicCaptureMetadata.baseline,
+            test: cyclicCaptureMetadata.test,
+            comparison: cyclicComparisonState
+        };
+    }
+
+    function cyclicSessionAfterLogChange(session) {
+        var current = session || {};
+        return {
+            selection: current.selection || canonicalCyclicSelection("pitch", "P"),
+            // Baseline metadata intentionally survives a new log so a pilot
+            // can make a cross-file comparison in this app session.
+            baseline: current.baseline || null,
+            test: null,
+            comparison: null
+        };
+    }
+
+    function cyclicSessionAfterSelectionChange(session, selection) {
+        var normalized = canonicalCyclicSelection(
+            selection && selection.axis,
+            selection && selection.term
+        );
+        if (!normalized) {
+            return null;
+        }
+        return {
+            selection: normalized,
+            baseline: null,
+            test: null,
+            comparison: null
+        };
+    }
+
+    function applyCyclicSessionState(session) {
+        if (!session || !session.selection) {
+            return false;
+        }
+        cyclicSelection = {
+            axis: session.selection.axis,
+            term: session.selection.term
+        };
+        cyclicCaptureMetadata = {
+            baseline: session.baseline || null,
+            test: session.test || null
+        };
+        cyclicComparisonState = session.comparison || null;
+        return true;
+    }
+
+    function cyclicCaptureRequestPayload(slot, range, context, selection) {
+        var normalizedSlot = canonicalCyclicSlot(slot);
+        var normalizedSelection = canonicalCyclicSelection(
+            selection && selection.axis,
+            selection && selection.term
+        );
+        if (!normalizedSlot || !normalizedSelection || !range
+                || !Number.isSafeInteger(range.startTimeUs)
+                || !Number.isSafeInteger(range.endTimeUs)
+                || range.startTimeUs >= range.endTimeUs) {
+            return null;
+        }
+
+        var sourceContext = context || {};
+        var fileName = typeof sourceContext.fileName === "string"
+            ? sourceContext.fileName.slice(0, 240) : "Blackbox log";
+        var logIndex = Number.isInteger(sourceContext.logIndex)
+                && sourceContext.logIndex >= 0
+            ? sourceContext.logIndex : null;
+        var logStartTimeUs = Number.isSafeInteger(sourceContext.logStartTimeUs)
+            ? sourceContext.logStartTimeUs : null;
+        var rangeCopy = Object.freeze(copyRange(range));
+        var source = Object.freeze({
+            fileName: fileName,
+            logIndex: logIndex,
+            logStartTimeUs: logStartTimeUs
+        });
+
+        return Object.freeze({
+            protocolVersion: 1,
+            slot: normalizedSlot,
+            axis: normalizedSelection.axis,
+            term: normalizedSelection.term,
+            range: rangeCopy,
+            source: source,
+            automatic: false,
+            comparisonRequired: true
+        });
+    }
+
+    function validCyclicCodeList(codes, maximum) {
+        return Array.isArray(codes)
+            && codes.length <= maximum
+            && codes.every(function(code, index) {
+                return typeof code === "string"
+                    && /^[A-Z][A-Z0-9_]{0,79}$/.test(code)
+                    && Object.prototype.hasOwnProperty.call(CYCLIC_REASON_MESSAGES, code)
+                    && codes.indexOf(code) === index;
+            });
+    }
+
+    function cyclicEngineApi() {
+        var engine = window.RotorLensCyclicPidAnalysis;
+        return engine
+            && typeof engine.captureFlightLogRange === "function"
+            && typeof engine.compareCaptures === "function"
+            ? engine : null;
+    }
+
+    function cyclicPayloadContainsForbiddenKey(value, depth) {
+        var forbidden = [
+            "records", "frames", "samples", "rawFrames", "rawLog", "log",
+            "advice", "recommendation", "direction", "delta", "proposal",
+            "write", "setting", "currentValue", "proposedValue", "rollbackValue"
+        ];
+        var level = depth || 0;
+        if (!value || typeof value !== "object") {
+            return false;
+        }
+        if (level > 12 || Object.keys(value).length > 256) {
+            return true;
+        }
+        return Object.keys(value).some(function(key) {
+            return forbidden.indexOf(key) >= 0
+                || cyclicPayloadContainsForbiddenKey(value[key], level + 1);
+        });
+    }
+
+    function cyclicCaptureMatchesRequest(capture, request) {
+        return Boolean(capture
+            && typeof capture === "object"
+            && !Array.isArray(capture)
+            && hasExactObjectKeys(capture, [
+                "schemaVersion", "kind", "status", "codes", "axis", "term",
+                "range", "firmware", "gainValue", "configuration",
+                "availability", "quality", "maneuver", "selectedFingerprint",
+                "integrityKey"
+            ])
+            && !cyclicPayloadContainsForbiddenKey(capture, 0)
+            && capture.schemaVersion === 1
+            && capture.kind === "rotorlens-cyclic-pid-capture"
+            && ["captured", "inconclusive"].indexOf(capture.status) >= 0
+            && capture.axis === request.axis
+            && capture.term === request.term
+            && capture.range
+            && capture.range.startTimeUs === request.range.startTimeUs
+            && capture.range.endTimeUs === request.range.endTimeUs
+            && hasExactObjectKeys(capture.range, [
+                "startTimeUs", "endTimeUs", "durationUs"
+            ])
+            && Number.isSafeInteger(capture.range.durationUs)
+            && capture.range.durationUs === request.range.endTimeUs - request.range.startTimeUs
+            && validCyclicCodeList(capture.codes, 32)
+            && typeof capture.integrityKey === "string"
+            && /^cap-[a-f0-9]{8}$/.test(capture.integrityKey)
+            && capture.maneuver && typeof capture.maneuver === "object"
+            && capture.quality && typeof capture.quality === "object");
+    }
+
+    function cyclicCaptureMetadataFromResult(slot, capture, request) {
+        if (!cyclicCaptureMatchesRequest(capture, request)) {
+            return null;
+        }
+        var maneuver = capture.maneuver;
+        var quality = capture.quality;
+        return normalizeCyclicCaptureMetadata(slot, {
+            captureId: capture.integrityKey,
+            axis: capture.axis,
+            term: capture.term,
+            range: capture.range,
+            source: request.source,
+            captureStatus: capture.status,
+            codes: capture.codes,
+            gainValue: capture.gainValue,
+            stopCount: maneuver.stopCount,
+            positiveStopCount: maneuver.positiveStopCount,
+            negativeStopCount: maneuver.negativeStopCount,
+            measuredSampleRateHz: quality.measuredSampleRateHz
+        });
+    }
+
+    function normalizeCyclicCaptureMetadata(slot, metadata) {
+        var normalizedSlot = canonicalCyclicSlot(slot);
+        if (!normalizedSlot || !metadata || typeof metadata !== "object"
+                || Array.isArray(metadata)) {
+            return null;
+        }
+        var selection = canonicalCyclicSelection(metadata.axis, metadata.term);
+        var range = metadata.range;
+        var source = metadata.source && typeof metadata.source === "object"
+            ? metadata.source : metadata;
+        var captureId = typeof metadata.captureId === "string"
+            ? metadata.captureId.trim() : "";
+        var fileName = typeof source.fileName === "string"
+            ? source.fileName.trim().slice(0, 240) : "";
+        var logIndex = Number.isInteger(source.logIndex) && source.logIndex >= 0
+            ? source.logIndex : null;
+        var logStartTimeUs = Number.isSafeInteger(source.logStartTimeUs)
+            ? source.logStartTimeUs : null;
+        var captureStatus = metadata.captureStatus;
+        var codes = metadata.codes;
+        var gainValue = metadata.gainValue;
+        var stopCount = metadata.stopCount;
+        var positiveStopCount = metadata.positiveStopCount;
+        var negativeStopCount = metadata.negativeStopCount;
+        var measuredSampleRateHz = metadata.measuredSampleRateHz;
+
+        if (!selection || selection.axis !== cyclicSelection.axis
+                || selection.term !== cyclicSelection.term
+                || !captureId || captureId.length > 128
+                || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(captureId)
+                || !fileName || !range
+                || !Number.isSafeInteger(range.startTimeUs)
+                || !Number.isSafeInteger(range.endTimeUs)
+                || range.startTimeUs >= range.endTimeUs
+                || ["captured", "inconclusive"].indexOf(captureStatus) < 0
+                || !validCyclicCodeList(codes, 32)
+                || (captureStatus === "captured" && codes.length !== 0)
+                || (captureStatus === "inconclusive" && codes.length === 0)
+                || !(gainValue === null || isFiniteNumber(gainValue))
+                || !Number.isInteger(stopCount) || stopCount < 0 || stopCount > 64
+                || !Number.isInteger(positiveStopCount) || positiveStopCount < 0
+                || !Number.isInteger(negativeStopCount) || negativeStopCount < 0
+                || positiveStopCount + negativeStopCount !== stopCount
+                || !(measuredSampleRateHz === null
+                    || (isFiniteNumber(measuredSampleRateHz) && measuredSampleRateHz >= 0))) {
+            return null;
+        }
+
+        return Object.freeze({
+            captureId: captureId,
+            slot: normalizedSlot,
+            axis: selection.axis,
+            term: selection.term,
+            range: Object.freeze(copyRange(range)),
+            captureStatus: captureStatus,
+            codes: Object.freeze(codes.slice()),
+            gainValue: gainValue,
+            stopCount: stopCount,
+            positiveStopCount: positiveStopCount,
+            negativeStopCount: negativeStopCount,
+            measuredSampleRateHz: measuredSampleRateHz,
+            source: Object.freeze({
+                fileName: fileName,
+                logIndex: logIndex,
+                logStartTimeUs: logStartTimeUs
+            })
+        });
+    }
+
+    function normalizeCyclicComparisonState(result) {
+        var allowedStatuses = ["comparable", "inconclusive", "improved", "worse", "mixed"];
+        if (!result || typeof result !== "object" || Array.isArray(result)
+                || !hasExactObjectKeys(result, [
+                    "schemaVersion", "kind", "status", "codes", "axis",
+                    "term", "gainValues", "evidence"
+                ])
+                || result.schemaVersion !== 1
+                || result.kind !== "rotorlens-cyclic-pid-comparison"
+                || allowedStatuses.indexOf(result.status) < 0
+                || result.axis !== cyclicSelection.axis
+                || result.term !== cyclicSelection.term) {
+            return null;
+        }
+        var codes = result.codes === undefined ? [] : result.codes;
+        var inconclusive = result.status === "inconclusive";
+        if (!validCyclicCodeList(codes, 32)
+                || (inconclusive && codes.length === 0)
+                || (!inconclusive && codes.length !== 0)) {
+            return null;
+        }
+        var gainValues = result.gainValues;
+        if (!gainValues || typeof gainValues !== "object" || Array.isArray(gainValues)
+                || Object.keys(gainValues).length !== 2
+                || !(gainValues.baseline === null || isFiniteNumber(gainValues.baseline))
+                || !(gainValues.test === null || isFiniteNumber(gainValues.test))) {
+            return null;
+        }
+        var evidence = result.evidence;
+        if (!Array.isArray(evidence)
+                || (inconclusive && evidence.length !== 0)
+                || (!inconclusive && evidence.length !== CYCLIC_COMPARISON_METRICS.length)) {
+            return null;
+        }
+        var normalizedEvidence = [];
+        for (var index = 0; index < evidence.length; index++) {
+            var item = evidence[index];
+            if (!item || typeof item !== "object" || Array.isArray(item)
+                    || !hasExactObjectKeys(item, [
+                        "metric", "baselineValue", "testValue",
+                        "testToBaselineRatio", "state"
+                    ])
+                    || CYCLIC_COMPARISON_METRICS[index] !== item.metric
+                    || !isFiniteNumber(item.baselineValue)
+                    || !isFiniteNumber(item.testValue)
+                    || !(item.testToBaselineRatio === null
+                        || isFiniteNumber(item.testToBaselineRatio))
+                    || ["improved", "worse", "stable"].indexOf(item.state) < 0) {
+                return null;
+            }
+            normalizedEvidence.push(Object.freeze({
+                metric: item.metric,
+                baselineValue: item.baselineValue,
+                testValue: item.testValue,
+                testToBaselineRatio: item.testToBaselineRatio,
+                state: item.state
+            }));
+        }
+        return Object.freeze({
+            status: result.status,
+            codes: Object.freeze(codes.slice()),
+            axis: result.axis,
+            term: result.term,
+            gainValues: Object.freeze({
+                baseline: gainValues.baseline,
+                test: gainValues.test
+            }),
+            evidence: Object.freeze(normalizedEvidence)
+        });
     }
 
     function createAIRequestId() {
@@ -728,6 +1272,590 @@
             + " s (" + formatDuration(range.endTimeUs - range.startTimeUs) + ")";
     }
 
+    function renderGlobalBlocker() {
+        if (!cacheElements()) {
+            return;
+        }
+        var blockers = [cyclicGlobalBlocker, analysisGlobalBlocker]
+            .filter(Boolean)
+            .sort(function(left, right) {
+                return (right.level === "danger" ? 1 : 0)
+                    - (left.level === "danger" ? 1 : 0);
+            });
+        errorBox.removeClass("alert-danger alert-warning");
+        if (!blockers.length) {
+            errorBox.attr("hidden", true).empty();
+            return;
+        }
+        var danger = blockers.some(function(blocker) {
+            return blocker.level === "danger";
+        });
+        errorBox
+            .addClass(danger ? "alert-danger" : "alert-warning")
+            .text(blockers.map(function(blocker) { return blocker.message; }).join(" "))
+            .removeAttr("hidden");
+    }
+
+    function setGlobalBlocker(level, message) {
+        analysisGlobalBlocker = message ? { level: level, message: message } : null;
+        renderGlobalBlocker();
+    }
+
+    function setCyclicGlobalBlocker(level, message) {
+        cyclicGlobalBlocker = message ? { level: level, message: message } : null;
+        renderGlobalBlocker();
+    }
+
+    function cyclicSafetyBlockerForMetadata(metadataBySlot, comparison) {
+        var codes = [];
+        CYCLIC_CAPTURE_SLOTS.forEach(function(slot) {
+            var metadata = metadataBySlot && metadataBySlot[slot];
+            (metadata && metadata.codes || []).forEach(function(code) {
+                if (codes.indexOf(code) < 0) {
+                    codes.push(code);
+                }
+            });
+        });
+        (comparison && comparison.codes || []).forEach(function(code) {
+            if (codes.indexOf(code) < 0) {
+                codes.push(code);
+            }
+        });
+        var stopCode = codes.find(function(code) {
+            return CYCLIC_STOP_CODES.indexOf(code) >= 0;
+        });
+        if (stopCode) {
+            return Object.freeze({
+                level: "danger",
+                message: "Cyclic capture stop / inspect: " + cyclicReasonText(stopCode)
+            });
+        }
+        var cautionCode = codes.find(function(code) {
+            return CYCLIC_CAUTION_CODES.indexOf(code) >= 0;
+        });
+        if (cautionCode) {
+            return Object.freeze({
+                level: "warning",
+                message: "Cyclic comparison withheld: " + cyclicReasonText(cautionCode)
+            });
+        }
+        return null;
+    }
+
+    function updateCyclicSafetyBlocker() {
+        var blocker = cyclicSafetyBlockerForMetadata(
+            cyclicCaptureMetadata,
+            cyclicComparisonState
+        );
+        setCyclicGlobalBlocker(
+            blocker && blocker.level,
+            blocker && blocker.message
+        );
+    }
+
+    function setModuleStatus(moduleName, label) {
+        if (!tuneCenterModuleStatuses || !tuneCenterModuleStatuses.length) {
+            return;
+        }
+        var status = tuneCenterModuleStatuses.filter(function() {
+            return this.getAttribute("data-tune-center-status") === moduleName;
+        });
+        var statusClass = label === "Available" || label === "Evidence ready"
+            ? "label-success"
+            : (label === "Withheld" ? "label-warning"
+                : (label === "Comparison required" ? "label-info" : "label-default"));
+        status
+            .removeClass("label-default label-info label-success label-warning label-danger")
+            .addClass(statusClass)
+            .attr("data-status", label.toLowerCase().replace(/\s+/g, "-"))
+            .text(label);
+    }
+
+    function updateTuneCenterModuleStatuses() {
+        if (!cacheElements()) {
+            return;
+        }
+        var hasRange = Boolean(currentLog && readSelectedRange());
+        if (!hasRange) {
+            setModuleStatus(
+                "cyclic",
+                cyclicCaptureMetadata.baseline
+                    && cyclicCaptureMetadata.baseline.captureStatus === "inconclusive"
+                    ? "Withheld" : "Needs range"
+            );
+            ["governor", "mechanical", "report"].forEach(function(name) {
+                setModuleStatus(name, "Needs range");
+            });
+        } else {
+            var cyclicLabel = cyclicCaptureMetadata.baseline
+                    && cyclicCaptureMetadata.baseline.captureStatus === "inconclusive"
+                ? "Withheld"
+                : (cyclicComparisonState
+                    && cyclicCaptureMetadata.baseline
+                    && cyclicCaptureMetadata.test
+                ? (["inconclusive", "mixed"].indexOf(cyclicComparisonState.status) >= 0
+                    ? "Withheld" : "Evidence ready")
+                : "Comparison required");
+            setModuleStatus("cyclic", cyclicLabel);
+            setModuleStatus("governor", tuneCenterAnalysisState.governor || "Available");
+            setModuleStatus("mechanical", tuneCenterAnalysisState.mechanical || "Available");
+            setModuleStatus("report", tuneCenterAnalysisState.report || "Available");
+        }
+        if (tuneCenterEmptyStates && tuneCenterEmptyStates.length) {
+            tuneCenterEmptyStates.prop("hidden", Boolean(currentPackage));
+        }
+    }
+
+    function showTuneCenterView(viewName, focusHeading) {
+        if (!cacheElements()) {
+            return false;
+        }
+        var nextView = canonicalTuneCenterView(viewName);
+        var previousView = activeTuneCenterView;
+        activeTuneCenterView = nextView;
+        tuneCenterViews.each(function() {
+            var view = $(this);
+            var active = this.getAttribute("data-tune-center-view") === nextView;
+            view.prop("hidden", !active);
+            view.attr("aria-hidden", active ? "false" : "true");
+            view.toggleClass("is-active", active);
+        });
+        modal.attr("data-tune-center-active-view", nextView);
+        modal.find(".modal-body").scrollTop(0);
+
+        if (focusHeading !== false) {
+            window.setTimeout(function() {
+                var target;
+                if (nextView === "home" && previousView !== "home") {
+                    target = modal.find("[data-tune-center-target='" + previousView + "']").first();
+                }
+                if (!target || !target.length) {
+                    target = modal.find("[data-tune-center-view='" + nextView
+                        + "'] [data-tune-center-heading]").first();
+                }
+                if (target && target.length) {
+                    target.trigger("focus");
+                }
+            }, 0);
+        }
+        return true;
+    }
+
+    function cyclicCaptureSummary(metadata) {
+        if (!metadata) {
+            return null;
+        }
+        var source = metadata.source || {};
+        var label = source.fileName || "Blackbox log";
+        if (Number.isInteger(source.logIndex)) {
+            label += " · embedded log " + (source.logIndex + 1);
+        }
+        label += " · " + rangeLabel(metadata.range, source.logStartTimeUs);
+        label += " · " + metadata.axis.charAt(0).toUpperCase()
+            + metadata.axis.slice(1) + " " + metadata.term;
+        if (isFiniteNumber(metadata.gainValue)) {
+            label += " · logged gain " + formatNumber(metadata.gainValue, 2);
+        }
+        label += " · " + metadata.stopCount + " stops (+"
+            + metadata.positiveStopCount + "/−" + metadata.negativeStopCount + ")";
+        label += metadata.measuredSampleRateHz === null
+            ? " · rate unavailable"
+            : " · " + formatNumber(metadata.measuredSampleRateHz, 0) + " Hz";
+        if (metadata.captureStatus === "inconclusive" && metadata.codes.length) {
+            label += " · withheld: " + cyclicReasonText(metadata.codes[0]);
+        }
+        return label;
+    }
+
+    function cyclicReasonText(code) {
+        return Object.prototype.hasOwnProperty.call(CYCLIC_REASON_MESSAGES, code)
+            ? CYCLIC_REASON_MESSAGES[code]
+            : humanizeMetric(code).toLowerCase() + ".";
+    }
+
+    function cyclicComparisonSummaryText(comparison) {
+        if (!comparison) {
+            return "";
+        }
+        if (comparison.status === "inconclusive") {
+            return "The pair did not pass every matched-flight and evidence gate, so no outcome was classified.";
+        }
+        if (comparison.status === "improved") {
+            return "One or more measured error/noise metrics decreased by more than the comparison tolerance and none increased beyond it.";
+        }
+        if (comparison.status === "worse") {
+            return "One or more measured error/noise metrics increased by more than the comparison tolerance and none decreased beyond it.";
+        }
+        if (comparison.status === "mixed") {
+            return "Some measured metrics decreased while others increased, so the evidence is mixed.";
+        }
+        return "All measured error/noise metrics stayed within the comparison tolerance.";
+    }
+
+    function renderCyclicComparisonEvidence() {
+        if (!cyclicComparisonEvidence || !cyclicComparisonEvidence.length) {
+            return;
+        }
+        cyclicComparisonMetrics.empty();
+        cyclicComparisonReasons.empty();
+        if (!cyclicComparisonState) {
+            cyclicComparisonEvidence.attr("hidden", true);
+            return;
+        }
+
+        var statusLabels = {
+            comparable: "Comparable",
+            inconclusive: "Withheld",
+            improved: "Metrics decreased",
+            worse: "Metrics increased",
+            mixed: "Mixed"
+        };
+        var statusClass = cyclicComparisonState.status === "inconclusive"
+                || cyclicComparisonState.status === "mixed"
+            ? "label-warning"
+            : (cyclicComparisonState.status === "worse" ? "label-danger" : "label-success");
+        cyclicComparisonStatus
+            .removeClass("label-default label-success label-warning label-danger")
+            .addClass(statusClass)
+            .text(statusLabels[cyclicComparisonState.status]);
+
+        var gainValues = cyclicComparisonState.gainValues;
+        var gainText = gainValues && isFiniteNumber(gainValues.baseline)
+                && isFiniteNumber(gainValues.test)
+            ? " Logged " + cyclicSelection.axis.charAt(0).toUpperCase()
+                + cyclicSelection.axis.slice(1) + " " + cyclicSelection.term
+                + " changed from " + formatNumber(gainValues.baseline, 2)
+                + " to " + formatNumber(gainValues.test, 2) + "."
+            : "";
+        cyclicComparisonSummary.text(cyclicComparisonSummaryText(cyclicComparisonState) + gainText);
+
+        cyclicComparisonState.evidence.forEach(function(item) {
+            var card = element("div", "tune-center-cyclic-metric is-" + item.state);
+            append(card, element("strong", null, CYCLIC_METRIC_LABELS[item.metric]));
+            append(card, element(
+                "span",
+                null,
+                formatNumber(item.baselineValue, 2) + " → "
+                    + formatNumber(item.testValue, 2) + " °/s · " + item.state
+            ));
+            append(cyclicComparisonMetrics[0], card);
+        });
+        cyclicComparisonState.codes.forEach(function(code) {
+            append(cyclicComparisonReasons[0], element("li", null, cyclicReasonText(code)));
+        });
+        cyclicComparisonReasons.prop("hidden", cyclicComparisonState.codes.length === 0);
+        cyclicComparisonEvidence.removeAttr("hidden");
+    }
+
+    function cyclicComparisonStatusText() {
+        if (!cyclicCaptureMetadata.baseline) {
+            return cyclicIntegrationReady
+                ? "Comparison required: save the current I/O range as a baseline."
+                : "Comparison required: deterministic capture integration is not connected yet.";
+        }
+        if (!cyclicCaptureMetadata.test) {
+            if (cyclicCaptureMetadata.baseline.captureStatus !== "captured") {
+                return "Baseline withheld: replace it with a range that passes every capture gate before saving a test.";
+            }
+            return "Comparison required: the baseline is saved in this app session; load or select a test range and save it explicitly.";
+        }
+        if (!cyclicComparisonState) {
+            return "Comparison required: both capture summaries are attached, but no validated deterministic comparison is available.";
+        }
+        var messages = {
+            comparable: "Evidence ready: all compared metrics stayed within the comparison tolerance.",
+            inconclusive: "Comparison withheld: the deterministic evidence is inconclusive.",
+            improved: "Evidence ready: one or more measured error/noise metrics decreased without another increasing; no tuning advice was created.",
+            worse: "Evidence ready: one or more measured error/noise metrics increased without another decreasing; no tuning advice was created.",
+            mixed: "Comparison withheld: the deterministic evidence is mixed."
+        };
+        return messages[cyclicComparisonState.status] || "Comparison required.";
+    }
+
+    function updateCyclicUi() {
+        if (!cacheElements()) {
+            return;
+        }
+        cyclicAxisInputs.filter("[value='" + cyclicSelection.axis + "']").prop("checked", true);
+        cyclicTermInputs.filter("[value='" + cyclicSelection.term + "']").prop("checked", true);
+        modal.find(".tune-center-axis-signature > span").each(function() {
+            $(this).toggleClass(
+                "is-selected",
+                this.textContent.toLowerCase() === cyclicSelection.axis.charAt(0)
+            );
+        });
+
+        CYCLIC_CAPTURE_SLOTS.forEach(function(slot) {
+            var metadata = cyclicCaptureMetadata[slot];
+            var status = cyclicSlotStatuses.filter("[data-cyclic-slot-status='" + slot + "']");
+            var summary = cyclicSlotSummaries.filter("[data-cyclic-slot-summary='" + slot + "']");
+            var button = cyclicCaptureButtons.filter("[data-cyclic-capture='" + slot + "']");
+            var comparisonAvailable = Boolean(metadata && cyclicComparisonState
+                && cyclicCaptureMetadata.baseline && cyclicCaptureMetadata.test);
+            status
+                .removeClass("label-default label-success label-warning")
+                .addClass(metadata
+                    ? (metadata.captureStatus === "captured" ? "label-success" : "label-warning")
+                    : "label-default")
+                .text(metadata
+                    ? (metadata.captureStatus === "captured" ? "Captured" : "Inconclusive")
+                    : "Comparison required");
+            if (metadata) {
+                summary.text(cyclicCaptureSummary(metadata));
+                button.text("Replace " + slot);
+            } else if (slot === "baseline") {
+                summary.text("No baseline capture is attached.");
+                button.text("Save current I/O as baseline");
+            } else {
+                summary.text(!cyclicCaptureMetadata.baseline
+                    ? "Save a baseline before attaching a test capture."
+                    : (cyclicCaptureMetadata.baseline.captureStatus === "captured"
+                        ? "No test capture is attached."
+                        : "Replace the withheld baseline before attaching a test capture."));
+                button.text("Save current I/O as test");
+            }
+        });
+
+        var validRange = Boolean(currentLog && readSelectedRange());
+        cyclicCaptureButtons.each(function() {
+            var slot = this.getAttribute("data-cyclic-capture");
+            var busy = Boolean(activeCyclicCapture);
+            var canCapture = !busy && cyclicIntegrationReady && validRange
+                && (slot === "baseline" || Boolean(
+                    cyclicCaptureMetadata.baseline
+                    && cyclicCaptureMetadata.baseline.captureStatus === "captured"
+                ));
+            $(this).prop("disabled", !canCapture);
+            if (busy && activeCyclicCapture.slot === slot) {
+                $(this).text("Capturing " + slot + "…");
+            }
+        });
+        cyclicClearButton.prop("disabled", Boolean(activeCyclicCapture) || !(
+            cyclicCaptureMetadata.baseline || cyclicCaptureMetadata.test
+        ));
+        cyclicStatus.text(cyclicComparisonStatusText());
+        renderCyclicComparisonEvidence();
+        updateCyclicSafetyBlocker();
+        updateTuneCenterModuleStatuses();
+    }
+
+    function clearCyclicComparison(message) {
+        cancelActiveCyclicCapture();
+        cyclicCaptures = { baseline: null, test: null };
+        cyclicCaptureMetadata = { baseline: null, test: null };
+        cyclicComparisonState = null;
+        updateCyclicUi();
+        if (message && cyclicStatus && cyclicStatus.length) {
+            cyclicStatus.text(message);
+        }
+        return true;
+    }
+
+    function setCyclicIntegrationReady(ready) {
+        cyclicIntegrationReady = ready === true;
+        updateCyclicUi();
+        return cyclicIntegrationReady;
+    }
+
+    function setCyclicCaptureMetadata(slot, metadata) {
+        var normalized = normalizeCyclicCaptureMetadata(slot, metadata);
+        if (!normalized || (slot === "test" && (!cyclicCaptureMetadata.baseline
+                || cyclicCaptureMetadata.baseline.captureStatus !== "captured"))) {
+            return false;
+        }
+        if (slot === "baseline") {
+            cyclicCaptureMetadata.baseline = normalized;
+            cyclicCaptureMetadata.test = null;
+        } else {
+            cyclicCaptureMetadata.test = normalized;
+        }
+        cyclicComparisonState = null;
+        updateCyclicUi();
+        return true;
+    }
+
+    function setCyclicComparisonResult(result) {
+        var normalized = normalizeCyclicComparisonState(result);
+        if (!normalized || !cyclicCaptureMetadata.baseline || !cyclicCaptureMetadata.test) {
+            return false;
+        }
+        cyclicComparisonState = normalized;
+        updateCyclicUi();
+        return true;
+    }
+
+    function cancelActiveCyclicCapture() {
+        if (!activeCyclicCapture) {
+            return false;
+        }
+        activeCyclicCapture.cancelled = true;
+        activeCyclicCapture = null;
+        updateCyclicUi();
+        return true;
+    }
+
+    function cyclicCaptureBindingMatches(job, live) {
+        var context = live || {};
+        return Boolean(job
+            && context.activeJob === job
+            && !job.cancelled
+            && job.generation === context.generation
+            && job.log === context.log
+            && rangesEqual(job.range, context.range)
+            && context.selection
+            && job.axis === context.selection.axis
+            && job.term === context.selection.term
+            && (job.slot !== "test" || job.baselineCapture === context.baselineCapture));
+    }
+
+    function cyclicCaptureJobMatches(job) {
+        return cyclicCaptureBindingMatches(job, {
+            activeJob: activeCyclicCapture,
+            generation: generation,
+            log: currentLog,
+            range: readSelectedRange(),
+            selection: cyclicSelection,
+            baselineCapture: cyclicCaptures.baseline
+        });
+    }
+
+    function cyclicCaptureErrorText(error) {
+        var code = error && typeof error.code === "string" ? error.code : "";
+        if (code === "CYCLIC_ANALYSIS_CANCELLED") {
+            return "Cyclic capture stopped because its log, range, or selection changed.";
+        }
+        if (code === "CYCLIC_RANGE_DURATION_LIMIT") {
+            return "Select a cyclic maneuver range no longer than 30 seconds.";
+        }
+        if (code && Object.prototype.hasOwnProperty.call(CYCLIC_REASON_MESSAGES, code)) {
+            return CYCLIC_REASON_MESSAGES[code];
+        }
+        return "The cyclic evidence capture failed closed. Check the selected range and try again.";
+    }
+
+    function requestCyclicCapture(slot) {
+        var selectedRange = readSelectedRange();
+        var logStartTimeUs = currentLog && typeof currentLog.getMinTime === "function"
+            ? currentLog.getMinTime() : null;
+        var request = cyclicCaptureRequestPayload(
+            slot,
+            selectedRange,
+            {
+                fileName: currentContext.fileName || "Blackbox log",
+                logIndex: currentContext.logIndex,
+                logStartTimeUs: logStartTimeUs
+            },
+            cyclicSelection
+        );
+        var engine = cyclicEngineApi();
+        if (!cyclicIntegrationReady || !engine || !request) {
+            if (cyclicStatus && cyclicStatus.length) {
+                cyclicStatus.text("Comparison required: select a valid I/O range and connect the deterministic capture integration.");
+            }
+            return false;
+        }
+        if (activeCyclicCapture) {
+            cyclicStatus.text("A cyclic evidence capture is already running. Wait for it to finish or change the range to cancel it.");
+            return false;
+        }
+        var job = {
+            slot: request.slot,
+            axis: request.axis,
+            term: request.term,
+            range: copyRange(request.range),
+            source: request.source,
+            generation: generation,
+            log: currentLog,
+            baselineCapture: request.slot === "test" ? cyclicCaptures.baseline : null,
+            cancelled: false
+        };
+        if (job.slot === "test" && (!job.baselineCapture
+                || job.baselineCapture.status !== "captured")) {
+            cyclicStatus.text("Save a baseline that passes every capture gate before the test capture.");
+            return false;
+        }
+        activeCyclicCapture = job;
+        updateCyclicUi();
+        $(document).trigger("rotorlens:cyclic-capture-request", [request]);
+        cyclicStatus.text("Capturing " + slot + " evidence from the exact selected I/O range…");
+        Promise.resolve(engine.captureFlightLogRange(job.log, {
+            timeRangeUs: copyRange(job.range),
+            axis: job.axis,
+            term: job.term,
+            isCancelled: function() {
+                return !cyclicCaptureJobMatches(job);
+            },
+            onProgress: function(progress) {
+                if (!cyclicCaptureJobMatches(job) || !progress) {
+                    return;
+                }
+                var total = isFiniteNumber(progress.total) && progress.total > 0
+                    ? progress.total : 1;
+                var completed = isFiniteNumber(progress.completed)
+                    ? Math.max(0, Math.min(total, progress.completed)) : 0;
+                cyclicStatus.text("Capturing " + slot + " evidence · "
+                    + Math.round((completed / total) * 100) + "%");
+            }
+        })).then(function(capture) {
+            if (!cyclicCaptureJobMatches(job)) {
+                return;
+            }
+            var metadata = cyclicCaptureMetadataFromResult(job.slot, capture, request);
+            if (!metadata) {
+                throw new Error("Cyclic capture contract mismatch");
+            }
+            if (job.slot === "baseline") {
+                cyclicCaptures = { baseline: capture, test: null };
+            } else {
+                cyclicCaptures.test = capture;
+            }
+            if (!setCyclicCaptureMetadata(job.slot, metadata)) {
+                throw new Error("Cyclic capture metadata rejected");
+            }
+            if (job.slot === "test") {
+                var comparison = engine.compareCaptures(job.baselineCapture, capture);
+                if (!cyclicCaptureJobMatches(job)
+                        || !setCyclicComparisonResult(comparison)) {
+                    throw new Error("Cyclic comparison contract mismatch");
+                }
+            }
+            activeCyclicCapture = null;
+            updateCyclicUi();
+        }).catch(function(error) {
+            if (activeCyclicCapture !== job) {
+                return;
+            }
+            activeCyclicCapture = null;
+            updateCyclicUi();
+            cyclicStatus.text(cyclicCaptureErrorText(error));
+        });
+        return true;
+    }
+
+    function applyCyclicSelection(axis, term) {
+        var nextSelection = canonicalCyclicSelection(axis, term);
+        if (!nextSelection) {
+            return false;
+        }
+        if (nextSelection.axis === cyclicSelection.axis
+                && nextSelection.term === cyclicSelection.term) {
+            return true;
+        }
+        applyCyclicSessionState(cyclicSessionAfterSelectionChange(
+            cyclicSessionState(),
+            nextSelection
+        ));
+        cancelActiveCyclicCapture();
+        cyclicCaptures = { baseline: null, test: null };
+        updateCyclicUi();
+        $(document).trigger("rotorlens:cyclic-selection-change", [Object.freeze({
+            axis: cyclicSelection.axis,
+            term: cyclicSelection.term
+        })]);
+        cyclicStatus.text("Comparison required: axis or term changed, so the prior comparison was cleared.");
+        return true;
+    }
+
     function humanizeMetric(value) {
         return String(value || "Measurement")
             .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -754,7 +1882,7 @@
 
         logSummary.empty();
         if (!currentLog) {
-            append(logSummary[0], element("span", null, "Open a Blackbox log to use Tune Advisor."));
+            append(logSummary[0], element("span", null, "Open a Blackbox log to use Tune Center."));
             return;
         }
 
@@ -1330,13 +2458,14 @@
         recommendationContainer.empty();
         currentMechanicalState = null;
         clearMechanicalPresentation();
-        errorBox.text(message || "Tune Advisor could not analyze this log.");
-        errorBox.removeAttr("hidden");
+        tuneCenterAnalysisState = { governor: null, mechanical: null, report: null };
+        setGlobalBlocker("danger", message || "Tune Center could not analyze this log.");
         rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
         modal.attr("aria-busy", "false");
         confirmationBusy = false;
         confirmationNotice = "Analysis stopped. Review the selected range and user-entered prerequisites before trying again.";
         updateConfirmationUi();
+        updateTuneCenterModuleStatuses();
     }
 
     function resetPresentation() {
@@ -1346,7 +2475,6 @@
 
         clearAICoachPresentation();
         renderPendingLogSummary();
-        errorBox.attr("hidden", true).empty();
         results.attr("hidden", true);
         findingsContainer.empty();
         measurementsContainer.empty();
@@ -1356,11 +2484,22 @@
         recommendationContainer.empty();
         clearMechanicalPresentation();
         overallStatus.removeClass("status-pass status-caution status-blocked").empty();
+        tuneCenterAnalysisState = { governor: null, mechanical: null, report: null };
         progressContainer.removeAttr("hidden");
-        setProgress(currentLog ? "Ready to analyze this log." : "Open a log to begin.", 0);
-        rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
+        var selectedRange = currentLog ? readSelectedRange() : null;
+        setProgress(currentLog
+            ? (selectedRange ? "Ready to analyze the selected range." : "Set graph In and Out to enable analysis.")
+            : "Open a log to begin.", 0);
+        rerunButton.prop("disabled", !(currentLog && selectedRange));
+        setGlobalBlocker(
+            currentLog && !selectedRange ? "warning" : null,
+            currentLog && !selectedRange
+                ? "Needs range: set both graph In and Out markers, with In before Out. No analysis has run."
+                : null
+        );
         modal.attr("aria-busy", "false");
         updateConfirmationUi();
+        updateCyclicUi();
     }
 
     function metricLine(label, value) {
@@ -3021,6 +4160,15 @@
             .addClass(status.className)
             .text(status.label);
 
+        tuneCenterAnalysisState.governor = recommendationValidation.state === "valid"
+            ? "Available" : "Withheld";
+        tuneCenterAnalysisState.mechanical = mechanicalValidation.state === "valid"
+                && mechanicalValidation.result
+                && mechanicalValidation.result.status === "clear"
+            ? "Available" : "Withheld";
+        tuneCenterAnalysisState.report = status.className === "status-blocked"
+            ? "Withheld" : "Available";
+
         renderWithheldReasons(gateState.gate);
         renderRecommendation(
             evidencePackage,
@@ -3037,11 +4185,24 @@
             recommendationValidation,
             mechanicalValidation
         );
-        errorBox.attr("hidden", true).empty();
         results.removeAttr("hidden");
         progressContainer.removeAttr("hidden");
         setProgress("Analysis complete for the exact submitted In/Out range.", 100);
         rerunButton.prop("disabled", false);
+        if (status.className === "status-blocked") {
+            setGlobalBlocker(
+                "danger",
+                "Stop / inspect: selected-range evidence blocked tuning guidance. Review the report before flying another test."
+            );
+        } else if (mechanicalNeedsInspection(mechanicalValidation)) {
+            setGlobalBlocker(
+                "warning",
+                "Mechanical inspection advised: selected-range vibration evidence withholds Governor and PID tuning guidance."
+            );
+        } else {
+            setGlobalBlocker(null, null);
+        }
+        updateTuneCenterModuleStatuses();
         modal.attr("aria-busy", "false");
         return true;
     }
@@ -3051,6 +4212,7 @@
             activeJob.cancelled = true;
             activeJob = null;
         }
+        cancelActiveCyclicCapture();
         cancelAICoachRequest(true);
     }
 
@@ -3065,7 +4227,8 @@
         currentPackageRange = null;
         currentMechanicalState = null;
         confirmationBusy = false;
-        errorBox.attr("hidden", true).empty();
+        tuneCenterAnalysisState = { governor: null, mechanical: null, report: null };
+        setGlobalBlocker(null, null);
         results.attr("hidden", true);
         withheldSection.attr("hidden", true);
         withheldReasonsContainer.empty();
@@ -3078,6 +4241,7 @@
         rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
         modal.attr("aria-busy", "false");
         updateConfirmationUi();
+        updateTuneCenterModuleStatuses();
     }
 
     function resetConfirmationsForRange() {
@@ -3136,7 +4300,8 @@
         };
         activeJob = job;
 
-        errorBox.attr("hidden", true).empty();
+        analysisGlobalBlocker = null;
+        renderGlobalBlocker();
         results.attr("hidden", true);
         withheldSection.attr("hidden", true);
         withheldReasonsContainer.empty();
@@ -3299,13 +4464,21 @@
             return;
         }
 
+        showTuneCenterView("home", false);
+        renderPendingLogSummary();
+        updateCyclicUi();
+        updateTuneCenterModuleStatuses();
         modal.modal("show");
-        startAnalysis(false);
     }
 
     function setCurrentLog(flightLog, context) {
         generation++;
         cancelActiveJob();
+        applyCyclicSessionState(cyclicSessionAfterLogChange(cyclicSessionState()));
+        cyclicCaptures = {
+            baseline: cyclicCaptures.baseline || null,
+            test: null
+        };
         currentLog = flightLog || null;
         currentContext = context || {};
         currentPackage = null;
@@ -3316,9 +4489,8 @@
             : "");
         setTriggerEnabled(Boolean(currentLog));
         resetPresentation();
-
-        if (currentLog && cacheElements() && modal.hasClass("in")) {
-            startAnalysis(true);
+        if (cacheElements() && modal.hasClass("in")) {
+            showTuneCenterView("home", true);
         }
     }
 
@@ -3338,6 +4510,38 @@
 
         rerunButton.on("click.rotorLensTuneAdvisor", function() {
             startAnalysis(true);
+        });
+
+        modal.on("click.rotorLensTuneCenter", "[data-tune-center-target]", function() {
+            showTuneCenterView(this.getAttribute("data-tune-center-target"), true);
+        });
+
+        modal.on("click.rotorLensTuneCenter", "[data-tune-center-back]", function() {
+            showTuneCenterView("home", true);
+        });
+
+        cyclicAxisInputs.on("change.rotorLensTuneCenter", function() {
+            if (this.checked) {
+                applyCyclicSelection(this.value, cyclicSelection.term);
+            }
+        });
+
+        cyclicTermInputs.on("change.rotorLensTuneCenter", function() {
+            if (this.checked) {
+                applyCyclicSelection(cyclicSelection.axis, this.value);
+            }
+        });
+
+        cyclicCaptureButtons.on("click.rotorLensTuneCenter", function() {
+            requestCyclicCapture(this.getAttribute("data-cyclic-capture"));
+        });
+
+        cyclicClearButton.on("click.rotorLensTuneCenter", function() {
+            clearCyclicComparison("Comparison cleared. Save a new baseline and test explicitly.");
+            $(document).trigger("rotorlens:cyclic-comparison-clear", [Object.freeze({
+                axis: cyclicSelection.axis,
+                term: cyclicSelection.term
+            })]);
         });
 
         aiCoachAction.on("click.rotorLensTuneAdvisor", function() {
@@ -3401,9 +4605,10 @@
             currentMechanicalState = null;
             resetConfirmationsForRange();
             resetPresentation();
-            if (modal.hasClass("in") && readSelectedRange()) {
-                startAnalysis(true);
-            }
+        });
+
+        modal.on("shown.bs.modal.rotorLensTuneAdvisor", function() {
+            showTuneCenterView("home", true);
         });
 
         modal.on("hidden.bs.modal.rotorLensTuneAdvisor", function() {
@@ -3416,6 +4621,7 @@
             $(".open-tune-advisor:visible").first().trigger("focus");
         });
 
+        setCyclicIntegrationReady(Boolean(cyclicEngineApi()));
         setTriggerEnabled(Boolean(currentLog));
         resetPresentation();
     }
@@ -3431,6 +4637,17 @@
             overallState: overallState,
             emptyConfirmationValues: emptyConfirmationValues,
             groupedConfirmationValues: groupedConfirmationValues,
+            canonicalTuneCenterView: canonicalTuneCenterView,
+            canonicalCyclicSelection: canonicalCyclicSelection,
+            cyclicCaptureRequestPayload: cyclicCaptureRequestPayload,
+            cyclicCaptureMatchesRequest: cyclicCaptureMatchesRequest,
+            cyclicCaptureMetadataFromResult: cyclicCaptureMetadataFromResult,
+            normalizeCyclicCaptureMetadata: normalizeCyclicCaptureMetadata,
+            normalizeCyclicComparisonState: normalizeCyclicComparisonState,
+            cyclicCaptureBindingMatches: cyclicCaptureBindingMatches,
+            cyclicSafetyBlockerForMetadata: cyclicSafetyBlockerForMetadata,
+            cyclicSessionAfterLogChange: cyclicSessionAfterLogChange,
+            cyclicSessionAfterSelectionChange: cyclicSessionAfterSelectionChange,
             verifiedRotorflightBuild: verifiedRotorflightBuild,
             recommendationMetadataMatches: recommendationMetadataMatches,
             exactCanonicalConfirmationIds: exactCanonicalConfirmationIds,

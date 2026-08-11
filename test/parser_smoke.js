@@ -171,8 +171,21 @@ function assertRealRotorflightFixture(FlightLog) {
     assert.strictEqual(flightLog.getLogCount(), 1);
     assert.strictEqual(flightLog.getLogError(0), false);
     assert.strictEqual(flightLog.openLog(0), true);
-    assert.strictEqual(flightLog.getSysConfig().firmwareType, 5);
-    assert.strictEqual(flightLog.getSysConfig().firmwareVersion, "4.3.0");
+    const sysConfig = flightLog.getSysConfig();
+    assert.strictEqual(sysConfig.firmwareType, 5);
+    assert.strictEqual(sysConfig.firmwareVersion, "4.3.0");
+    assert.strictEqual(
+        sysConfig.gyro_decimation_hz,
+        250,
+        "Rotorflight gyro_decimation_hz must survive header parsing"
+    );
+    assert.strictEqual(
+        sysConfig.unknownHeaders.some(function(header) {
+            return header.name === "gyro_decimation_hz";
+        }),
+        false,
+        "gyro_decimation_hz must be recognized instead of quarantined as unknown"
+    );
     assert.ok(flightLog.getMaxTime() > flightLog.getMinTime());
     assert.ok(flightLog.getMainFieldNames().length > 20);
 }

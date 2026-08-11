@@ -80,7 +80,7 @@ function assertNativeOpenSeam() {
     assert.ok(androidHostSource.includes("pruneAcknowledgedSharedLogs("));
     assert.ok(androidHostSource.includes("sharedLogs.get(token)"));
     assert.ok(!androidHostSource.includes("/shared/current"));
-    assert.ok(androidHostSource.includes('VIEWER_ASSET_VERSION = "121"'));
+    assert.ok(androidHostSource.includes('VIEWER_ASSET_VERSION = "124"'));
     assert.ok(androidHostSource.includes('"/assets/index.html?v=" + VIEWER_ASSET_VERSION'));
     assert.ok(androidHostSource.includes("shouldRestoreWebViewState(savedAssetVersion)"));
     assert.ok(androidHostSource.includes("webView.restoreState(savedInstanceState)"));
@@ -185,7 +185,7 @@ function assertTuneAdvisorSelectedRangeContract() {
         /androidAssetVersion = "([0-9]+)"/
     );
     assert.ok(nativeAssetVersion && platformAssetVersion);
-    assert.strictEqual(nativeAssetVersion[1], "121");
+    assert.strictEqual(nativeAssetVersion[1], "124");
     assert.strictEqual(platformAssetVersion[1], nativeAssetVersion[1]);
     const viewerAssetVersion = nativeAssetVersion[1];
 
@@ -216,6 +216,10 @@ function assertTuneAdvisorSelectedRangeContract() {
     assert.ok(uiSource.includes("function validateMechanicalResult(mechanicalResult, submittedRange)"));
     assert.ok(uiSource.includes("MECHANICAL_RANGE_MISMATCH"));
     assert.ok(uiSource.includes("engineOptions.mechanicalGate"));
+    assert.ok(
+        uiSource.includes("analysisGlobalBlocker = null;\n        renderGlobalBlocker();"),
+        "Starting a report analysis must preserve any sticky cyclic safety blocker"
+    );
     assert.ok(
         uiSource.indexOf("mechanicalEngine.analyzeFlightLog")
             < uiSource.indexOf("Promise.resolve(engine.analyzeFlightLog"),
@@ -260,12 +264,14 @@ function assertTuneAdvisorSelectedRangeContract() {
     });
     [
         "css/rotorlens_advisor.css",
+        "js/flightlog_parser.js",
         "js/advisor/evidence_contract.js",
         "js/advisor/deterministic_metrics.js",
         "js/advisor/rules.js",
         "js/advisor/flightlog_adapter.js",
         "js/advisor/mechanical_analysis.js",
         "js/advisor/ai_contract.js",
+        "js/advisor/cyclic_pid_analysis.js",
         "js/advisor/advisor_ui.js",
         "js/main.js",
         "index.js"
@@ -278,6 +284,58 @@ function assertTuneAdvisorSelectedRangeContract() {
             < htmlSource.indexOf("js/advisor/advisor_ui.js?v=" + viewerAssetVersion),
         "The strict AI safety contract must load before the Advisor UI"
     );
+    assert.ok(
+        htmlSource.indexOf("js/advisor/cyclic_pid_analysis.js?v=" + viewerAssetVersion)
+            < htmlSource.indexOf("js/advisor/advisor_ui.js?v=" + viewerAssetVersion),
+        "The cyclic comparison engine must load before its presentation hooks"
+    );
+    assert.ok(htmlSource.includes('data-tune-center-view="home"'));
+    assert.ok(!htmlSource.includes('data-tune-center-view="home" hidden'));
+    ["cyclic", "governor", "mechanical", "report"].forEach(function(viewName) {
+        assert.ok(htmlSource.includes(
+            'data-tune-center-view="' + viewName + '"'
+        ));
+        assert.ok(htmlSource.includes(
+            'data-tune-center-target="' + viewName + '"'
+        ));
+    });
+    assert.strictEqual(
+        (htmlSource.match(/data-tune-center-target=/g) || []).length,
+        4,
+        "Tune Center home must expose exactly four drill-down modules"
+    );
+    assert.ok(htmlSource.includes("Save current I/O as baseline"));
+    assert.ok(htmlSource.includes("Save current I/O as test"));
+    assert.ok(htmlSource.includes("Measurement preview."));
+    assert.ok(htmlSource.includes('name="tune-center-cyclic-axis" value="roll"'));
+    assert.ok(htmlSource.includes('name="tune-center-cyclic-axis" value="pitch"'));
+    assert.ok(htmlSource.includes('name="tune-center-cyclic-axis" value="yaw"'));
+    assert.ok(htmlSource.includes('name="tune-center-cyclic-term" value="P"'));
+    assert.ok(htmlSource.includes('name="tune-center-cyclic-term" value="I"'));
+    assert.ok(htmlSource.includes('name="tune-center-cyclic-term" value="D"'));
+    assert.ok(!uiSource.includes("startAnalysis(false)"));
+    assert.ok(uiSource.includes('showTuneCenterView("home", false)'));
+    assert.ok(uiSource.includes('"rotorlens:cyclic-capture-request"'));
+    assert.ok(uiSource.includes('"rotorlens:cyclic-selection-change"'));
+    assert.ok(
+        uiSource.includes("engine.captureFlightLogRange(job.log"),
+        "Tune Center must call the deterministic cyclic capture engine"
+    );
+    assert.ok(
+        uiSource.includes("engine.compareCaptures(job.baselineCapture, capture)"),
+        "Tune Center must compare the exact baseline object against the accepted test capture"
+    );
+    assert.ok(htmlSource.includes("Measurement evidence only."));
+    assert.ok(htmlSource.includes("does not choose a PID direction or value"));
+    assert.ok(htmlSource.includes("roll/pitch P or D stop behavior"));
+    assert.ok(htmlSource.includes("I needs a sustained-hold test"));
+    assert.ok(htmlSource.includes("withholds a better/worse outcome"));
+    assert.ok(
+        !htmlSource.includes('role="listitem"'),
+        "Tune Center module buttons must retain native button accessibility semantics"
+    );
+    assert.ok(uiSource.includes("automatic: false"));
+    assert.ok(uiSource.includes("comparisonRequired: true"));
 
     const markerHooks = analysisMarkerTestHooks();
     assert.strictEqual(
@@ -365,6 +423,239 @@ function assertTuneAdvisorAIBridgeRuntime() {
         confirmedAsGroup,
         uncheckedAsGroup,
         "Unchecking must create a fresh fail-closed canonical confirmation set"
+    );
+
+    assert.strictEqual(hooks.canonicalTuneCenterView("cyclic"), "cyclic");
+    assert.strictEqual(hooks.canonicalTuneCenterView("unknown"), "home");
+    const normalizedSelection = hooks.canonicalCyclicSelection("PITCH", "p");
+    assert.strictEqual(normalizedSelection.axis, "pitch");
+    assert.strictEqual(normalizedSelection.term, "P");
+    assert.strictEqual(hooks.canonicalCyclicSelection("all", "P"), null);
+
+    const mutableRange = { startTimeUs: 1000000, endTimeUs: 7000000 };
+    const captureRequest = hooks.cyclicCaptureRequestPayload(
+        "baseline",
+        mutableRange,
+        { fileName: "baseline.bbl", logIndex: 1, logStartTimeUs: 500000 },
+        normalizedSelection
+    );
+    mutableRange.startTimeUs = 2000000;
+    assert.strictEqual(captureRequest.range.startTimeUs, 1000000);
+    assert.strictEqual(captureRequest.range.endTimeUs, 7000000);
+    assert.strictEqual(captureRequest.axis, "pitch");
+    assert.strictEqual(captureRequest.term, "P");
+    assert.strictEqual(captureRequest.automatic, false);
+    assert.strictEqual(captureRequest.comparisonRequired, true);
+    assert.ok(Object.isFrozen(captureRequest));
+    assert.ok(Object.isFrozen(captureRequest.range));
+
+    const validCyclicCapture = Object.freeze({
+        schemaVersion: 1,
+        kind: "rotorlens-cyclic-pid-capture",
+        status: "captured",
+        codes: Object.freeze([]),
+        axis: "pitch",
+        term: "P",
+        range: Object.freeze({
+            startTimeUs: 1000000,
+            endTimeUs: 7000000,
+            durationUs: 6000000
+        }),
+        firmware: Object.freeze({}),
+        gainValue: 55,
+        configuration: Object.freeze({}),
+        availability: Object.freeze({}),
+        maneuver: Object.freeze({
+            stopCount: 4,
+            positiveStopCount: 2,
+            negativeStopCount: 2
+        }),
+        quality: Object.freeze({ measuredSampleRateHz: 1000 }),
+        selectedFingerprint: "sel-deadbeef-6001",
+        integrityKey: "cap-deadbeef"
+    });
+    assert.strictEqual(
+        hooks.cyclicCaptureMatchesRequest(validCyclicCapture, captureRequest),
+        true
+    );
+    assert.strictEqual(
+        hooks.cyclicCaptureMatchesRequest(
+            Object.assign({}, validCyclicCapture, {
+                range: { startTimeUs: 1000001, endTimeUs: 7000000, durationUs: 5999999 }
+            }),
+            captureRequest
+        ),
+        false,
+        "Cyclic evidence must remain bound to the exact requested I/O range"
+    );
+    assert.strictEqual(
+        hooks.cyclicCaptureMatchesRequest(
+            Object.assign({}, validCyclicCapture, {
+                status: "inconclusive",
+                codes: ["INCREASE_P_TO_80"]
+            }),
+            captureRequest
+        ),
+        false,
+        "Unknown or advice-shaped cyclic reason codes must fail closed"
+    );
+    assert.strictEqual(
+        hooks.cyclicCaptureMatchesRequest(
+            Object.assign({}, validCyclicCapture, { records: [[1, 2, 3]] }),
+            captureRequest
+        ),
+        false,
+        "Raw frame arrays must never cross or persist through the cyclic UI boundary"
+    );
+    assert.strictEqual(
+        hooks.cyclicCaptureMatchesRequest(
+            Object.assign({}, validCyclicCapture, {
+                maneuver: Object.assign({}, validCyclicCapture.maneuver, {
+                    advice: "increase P"
+                })
+            }),
+            captureRequest
+        ),
+        false,
+        "Nested cyclic advice fields must fail closed"
+    );
+    assert.strictEqual(
+        hooks.cyclicCaptureMatchesRequest(
+            Object.assign({}, validCyclicCapture, {
+                status: "inconclusive",
+                codes: ["FIRMWARE_BUILD_UNSUPPORTED"]
+            }),
+            captureRequest
+        ),
+        true,
+        "Known engine hardening codes must cross the strict presentation boundary"
+    );
+    const cyclicMetadata = hooks.cyclicCaptureMetadataFromResult(
+        "baseline",
+        validCyclicCapture,
+        captureRequest
+    );
+    assert.strictEqual(cyclicMetadata.captureStatus, "captured");
+    assert.strictEqual(cyclicMetadata.stopCount, 4);
+    assert.strictEqual(cyclicMetadata.gainValue, 55);
+    assert.ok(Object.isFrozen(cyclicMetadata));
+
+    const validComparison = {
+        schemaVersion: 1,
+        kind: "rotorlens-cyclic-pid-comparison",
+        status: "improved",
+        codes: [],
+        axis: "pitch",
+        term: "P",
+        gainValues: { baseline: 55, test: 60 },
+        evidence: [
+            { metric: "trackingRmsDps", baselineValue: 12, testValue: 9, testToBaselineRatio: 0.75, state: "improved" },
+            { metric: "fastRingingRmsDps", baselineValue: 4, testValue: 4, testToBaselineRatio: 1, state: "stable" },
+            { metric: "slowOscillationRmsDps", baselineValue: 3, testValue: 3, testToBaselineRatio: 1, state: "stable" },
+            { metric: "rawNoiseStepRmsDps", baselineValue: 2, testValue: 2, testToBaselineRatio: 1, state: "stable" }
+        ]
+    };
+    const normalizedComparison = hooks.normalizeCyclicComparisonState(validComparison);
+    assert.strictEqual(normalizedComparison.status, "improved");
+    assert.strictEqual(normalizedComparison.evidence.length, 4);
+    assert.strictEqual(
+        hooks.normalizeCyclicComparisonState(Object.assign({}, validComparison, {
+            direction: "increase"
+        })),
+        null,
+        "The presentation boundary must reject fabricated cyclic direction fields"
+    );
+
+    const boundLog = {};
+    const boundBaseline = {};
+    const boundJob = {
+        slot: "test",
+        axis: "pitch",
+        term: "P",
+        range: { startTimeUs: 1000000, endTimeUs: 7000000 },
+        generation: 4,
+        log: boundLog,
+        baselineCapture: boundBaseline,
+        cancelled: false
+    };
+    const liveBinding = {
+        activeJob: boundJob,
+        generation: 4,
+        log: boundLog,
+        range: { startTimeUs: 1000000, endTimeUs: 7000000 },
+        selection: { axis: "pitch", term: "P" },
+        baselineCapture: boundBaseline
+    };
+    assert.strictEqual(hooks.cyclicCaptureBindingMatches(boundJob, liveBinding), true);
+    assert.strictEqual(
+        hooks.cyclicCaptureBindingMatches(boundJob, Object.assign({}, liveBinding, {
+            generation: 5
+        })),
+        false,
+        "A stale cyclic result must be discarded after generation changes"
+    );
+    assert.strictEqual(
+        hooks.cyclicCaptureBindingMatches(boundJob, Object.assign({}, liveBinding, {
+            baselineCapture: {}
+        })),
+        false,
+        "A test result must stay bound to the exact baseline capture object"
+    );
+    const cyclicStopBlocker = hooks.cyclicSafetyBlockerForMetadata({
+        baseline: { codes: ["SAMPLE_RATE_BELOW_900_HZ", "FAILSAFE_IN_SELECTION"] },
+        test: null
+    });
+    assert.strictEqual(cyclicStopBlocker.level, "danger");
+    assert.ok(cyclicStopBlocker.message.includes("stop / inspect"));
+    const cyclicCautionBlocker = hooks.cyclicSafetyBlockerForMetadata({
+        baseline: { codes: ["SAFETY_FIELDS_MISSING"] },
+        test: null
+    });
+    assert.strictEqual(cyclicCautionBlocker.level, "warning");
+    const cyclicQualityBlocker = hooks.cyclicSafetyBlockerForMetadata({
+        baseline: { codes: ["SAMPLE_RATE_BELOW_900_HZ"] },
+        test: null
+    });
+    assert.strictEqual(cyclicQualityBlocker.level, "warning");
+    assert.ok(cyclicQualityBlocker.message.includes("900 Hz"));
+    const cyclicComparisonBlocker = hooks.cyclicSafetyBlockerForMetadata(
+        { baseline: { codes: [] }, test: { codes: [] } },
+        { codes: ["RAW_GYRO_SOURCE_MISMATCH"] }
+    );
+    assert.strictEqual(cyclicComparisonBlocker.level, "warning");
+
+    const baselineMetadata = Object.freeze({ id: "baseline-summary" });
+    const lifecycleState = {
+        selection: normalizedSelection,
+        baseline: baselineMetadata,
+        test: Object.freeze({ id: "stale-test" }),
+        comparison: Object.freeze({ status: "improved" })
+    };
+    const afterLogChange = hooks.cyclicSessionAfterLogChange(lifecycleState);
+    assert.strictEqual(
+        afterLogChange.baseline,
+        baselineMetadata,
+        "Baseline summary metadata must survive a cross-file setCurrentLog lifecycle"
+    );
+    assert.strictEqual(afterLogChange.test, null);
+    assert.strictEqual(afterLogChange.comparison, null);
+    const afterSelectionChange = hooks.cyclicSessionAfterSelectionChange(
+        afterLogChange,
+        { axis: "roll", term: "D" }
+    );
+    assert.strictEqual(afterSelectionChange.selection.axis, "roll");
+    assert.strictEqual(afterSelectionChange.selection.term, "D");
+    assert.strictEqual(afterSelectionChange.baseline, null);
+    assert.strictEqual(afterSelectionChange.test, null);
+    assert.strictEqual(afterSelectionChange.comparison, null);
+    assert.strictEqual(
+        hooks.normalizeCyclicComparisonState({
+            status: "improved",
+            codes: [],
+            direction: "increase"
+        }),
+        null,
+        "The presentation boundary must reject fabricated direction/advice fields"
     );
     assert.strictEqual(
         hooks.aiBridgeAvailable(),
@@ -1228,7 +1519,7 @@ function assertTuneAdvisorResultValidationRuntime() {
     assert.deepStrictEqual(
         Object.keys(productionWindow.RotorLensTuneAdvisorUI).sort(),
         ["cancel", "open", "setCurrentLog"],
-        "Pure test hooks must not be exposed by the production Advisor API"
+        "Production API must expose only app control; cyclic evidence stays inside the validated module"
     );
 }
 

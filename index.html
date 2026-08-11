@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="css/header_dialog.css">
     <link rel="stylesheet" href="css/keys_dialog.css">
     <link rel="stylesheet" href="css/user_settings_dialog.css">
-    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=121">
+    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=124">
 
     <script src="js/vendor/modernizr-2.6.2-respond-1.1.0.min.js"></script>
 </head>
@@ -231,8 +231,8 @@
                             </a>
                         </li>
                         <li>
-                            <a href="#" class="open-tune-advisor auto-hide-menu disabled" aria-disabled="true" data-toggle="tooltip" title="Analyze the selected graph In/Out range on this device">
-                                <span class="glyphicon glyphicon-dashboard"></span> Tune Advisor
+                            <a href="#" class="open-tune-advisor auto-hide-menu disabled" aria-disabled="true" data-toggle="tooltip" title="Open Tune Center for the selected graph In/Out range">
+                                <span class="glyphicon glyphicon-dashboard"></span> Tune Center
                             </a>
                         </li>
                         <li class="divider"></li>
@@ -270,7 +270,7 @@
                     <button type="button" class="btn btn-default view-table" data-toggle="tooltip" title="View table">
                         <span class="glyphicon glyphicon-list-alt"></span>
                     </button>
-                    <button type="button" class="btn btn-default open-tune-advisor" disabled aria-label="Open Tune Advisor" data-toggle="tooltip" title="Analyze the selected graph In/Out range on this device">
+                    <button type="button" class="btn btn-default open-tune-advisor" disabled aria-label="Open Tune Center" data-toggle="tooltip" title="Open Tune Center for the selected graph In/Out range">
                         <span class="glyphicon glyphicon-dashboard"></span>
                     </button>
                 </div>
@@ -635,51 +635,23 @@
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close Tune Advisor">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close Tune Center">
                         <span aria-hidden="true">&times;</span>
                     </button>
-                    <p class="tune-advisor-kicker">ON-DEVICE · DETERMINISTIC</p>
-                    <h4 class="modal-title" id="tune-advisor-title">Tune Advisor</h4>
+                    <p class="tune-advisor-kicker">FIELD-SIDE · ON DEVICE</p>
+                    <h4 class="modal-title" id="tune-advisor-title">Tune Center</h4>
                     <p class="tune-advisor-description" id="tune-advisor-description">
-                        Measures control, governor, and vibration evidence only between your graph In and Out markers. It never changes flight-controller settings.
+                        Choose one tuning system and work only from evidence inside your exact graph In and Out range. Nothing here writes flight-controller settings.
                     </p>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-warning tune-advisor-safety" role="note">
-                        Set both In and Out on the graph before analysis. Treat every result as advisory, and land to inspect whenever safety is uncertain.
-                    </div>
-
-                    <div class="tune-advisor-log-summary" aria-live="polite"></div>
-
-                    <section class="tune-advisor-confirmations" aria-labelledby="tune-advisor-confirmations-heading">
-                        <div class="tune-advisor-section-heading">
-                            <h5 id="tune-advisor-confirmations-heading">Governor F readiness</h5>
-                            <span class="tune-advisor-confirmation-count label label-default">Not confirmed</span>
+                    <div class="tune-center-context-shell">
+                        <div class="tune-advisor-log-summary" aria-live="polite"></div>
+                        <div class="alert alert-warning tune-advisor-safety" role="note">
+                            Every module uses only the selected In/Out range. Treat results as advisory, change one setting at a time, and land to inspect whenever safety is uncertain.
                         </div>
-                        <p class="tune-advisor-confirmation-intro">
-                            One flight-readiness acknowledgment is required only before directional Governor F advice. It stays in this app session, resets when the log or selected setup changes, and never authorizes a settings write.
-                        </p>
-                        <fieldset class="tune-advisor-confirmation-list" disabled>
-                            <legend class="sr-only">Flight-readiness acknowledgment for Governor F advice</legend>
-                            <div class="tune-advisor-user-input">
-                                <label for="tune-advisor-governor-max-throttle">Configured Governor Maximum Throttle (%)</label>
-                                <input type="number" class="form-control" id="tune-advisor-governor-max-throttle" min="10" max="100" step="1" inputmode="numeric" autocomplete="off" required data-user-input="governorMaxThrottlePct" aria-describedby="tune-advisor-governor-max-throttle-help">
-                                <small id="tune-advisor-governor-max-throttle-help">
-                                    Required whole-number value from 10% through 100%. It must match the active aircraft profile; Blackbox does not log this per-profile setting.
-                                </small>
-                            </div>
-                            <label class="tune-advisor-confirmation-item">
-                                <input type="checkbox" data-flight-ready-confirmation>
-                                <span>
-                                    <strong>I confirm this aircraft and test are flight-ready</strong>
-                                    <small>I verified the mechanical condition, RPM/gearing, power system, active aircraft profile with no change before In, and conservative governed setup. The site, weather, pilot readiness, bailout plan, and pitch-pump maneuver are safe.</small>
-                                </span>
-                            </label>
-                        </fieldset>
-                        <p class="tune-advisor-confirmation-status" role="status" aria-live="polite" aria-atomic="true">
-                            Analyze the selected range once to identify its configuration before confirming flight readiness.
-                        </p>
-                    </section>
+                        <div class="alert alert-warning tune-advisor-error tune-center-global-blocker" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>
+                    </div>
 
                     <div class="tune-advisor-progress" role="status" aria-live="polite" aria-atomic="true">
                         <p class="tune-advisor-progress-label">Ready to analyze this log.</p>
@@ -688,69 +660,249 @@
                         </div>
                     </div>
 
-                    <div class="alert alert-danger tune-advisor-error" role="alert" hidden></div>
-                    <div class="tune-advisor-results" hidden>
-                        <section class="tune-advisor-section" aria-labelledby="tune-advisor-findings-heading">
-                            <div class="tune-advisor-section-heading">
-                                <h5 id="tune-advisor-findings-heading">What deserves attention</h5>
-                                <span class="tune-advisor-overall-status label label-default"></span>
+                    <div class="tune-center-view-stack">
+                        <section class="tune-center-view tune-center-home" data-tune-center-view="home" aria-labelledby="tune-center-home-heading">
+                            <div class="tune-center-home-heading">
+                                <h5 id="tune-center-home-heading" tabindex="-1" data-tune-center-heading>Choose a tuning system</h5>
+                                <p>Analyze once, then open only the evidence you need.</p>
                             </div>
-                            <div class="tune-advisor-findings"></div>
+                            <div class="tune-center-module-grid">
+                                <button type="button" class="tune-center-module-card tune-center-module-card-primary" data-tune-center-target="cyclic" aria-describedby="tune-center-cyclic-card-description">
+                                    <span class="tune-center-module-card-topline">
+                                        <strong>Cyclic PID Advisor</strong>
+                                        <span class="label label-info tune-center-module-status" data-tune-center-status="cyclic">Needs range</span>
+                                    </span>
+                                    <span id="tune-center-cyclic-card-description" class="tune-center-module-description">Preview matched baseline and test measurements for one roll, pitch, or yaw term.</span>
+                                    <span class="tune-center-axis-signature" aria-hidden="true">
+                                        <span>R</span><span class="is-selected">P</span><span>Y</span>
+                                        <i></i><i></i>
+                                    </span>
+                                </button>
+                                <button type="button" class="tune-center-module-card" data-tune-center-target="governor" aria-describedby="tune-center-governor-card-description">
+                                    <span class="tune-center-module-card-topline">
+                                        <strong>Governor F</strong>
+                                        <span class="label label-default tune-center-module-status" data-tune-center-status="governor">Needs range</span>
+                                    </span>
+                                    <span id="tune-center-governor-card-description" class="tune-center-module-description">Review the existing controlled pitch-pump gate and next-test result.</span>
+                                </button>
+                                <button type="button" class="tune-center-module-card" data-tune-center-target="mechanical" aria-describedby="tune-center-mechanical-card-description">
+                                    <span class="tune-center-module-card-topline">
+                                        <strong>Mechanical &amp; vibration</strong>
+                                        <span class="label label-default tune-center-module-status" data-tune-center-status="mechanical">Needs range</span>
+                                    </span>
+                                    <span id="tune-center-mechanical-card-description" class="tune-center-module-description">Inspect selected-range spectrum evidence before changing a tune.</span>
+                                </button>
+                                <button type="button" class="tune-center-module-card" data-tune-center-target="report" aria-describedby="tune-center-report-card-description">
+                                    <span class="tune-center-module-card-topline">
+                                        <strong>Selected-range report</strong>
+                                        <span class="label label-default tune-center-module-status" data-tune-center-status="report">Needs range</span>
+                                    </span>
+                                    <span id="tune-center-report-card-description" class="tune-center-module-description">Open measured findings, evidence, and the bounded AI Coach.</span>
+                                </button>
+                            </div>
                         </section>
 
-                        <section class="tune-advisor-section tune-advisor-mechanical-section" aria-labelledby="tune-advisor-mechanical-heading" hidden>
-                            <div class="tune-advisor-section-heading">
-                                <h5 id="tune-advisor-mechanical-heading">Mechanical / vibration evidence</h5>
-                                <span class="tune-advisor-mechanical-status label label-default"></span>
+                        <section class="tune-center-view tune-center-cyclic" data-tune-center-view="cyclic" aria-labelledby="tune-center-cyclic-heading" hidden>
+                            <div class="tune-center-detail-heading">
+                                <button type="button" class="btn btn-default tune-center-back" data-tune-center-back aria-label="Back to Tune Center modules">
+                                    <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span> Back
+                                </button>
+                                <div>
+                                    <p class="tune-center-detail-kicker">CYCLIC PID</p>
+                                    <h5 id="tune-center-cyclic-heading" tabindex="-1" data-tune-center-heading>Compare one axis and term</h5>
+                                </div>
                             </div>
-                            <div class="alert alert-info tune-advisor-mechanical-limit" role="note">
-                                Spectrum patterns are inspection clues, not a component diagnosis. This analysis does not recommend PID or Governor changes; inspect the mechanics first.
+                            <p class="tune-center-detail-intro">Save the current In/Out range as a baseline, then load or select a controlled test range. No capture is automatic, and no recommendation is created from one range.</p>
+
+                            <fieldset class="tune-center-selector-group tune-center-axis-selector">
+                                <legend>Axis</legend>
+                                <div class="tune-center-axis-rail">
+                                    <label><input type="radio" name="tune-center-cyclic-axis" value="roll"><span><strong>R</strong><small>Roll</small></span></label>
+                                    <label><input type="radio" name="tune-center-cyclic-axis" value="pitch" checked><span><strong>P</strong><small>Pitch</small></span></label>
+                                    <label><input type="radio" name="tune-center-cyclic-axis" value="yaw"><span><strong>Y</strong><small>Yaw</small></span></label>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="tune-center-selector-group tune-center-term-selector">
+                                <legend>PID term</legend>
+                                <div class="tune-center-term-rail">
+                                    <label><input type="radio" name="tune-center-cyclic-term" value="P" checked><span>P</span></label>
+                                    <label><input type="radio" name="tune-center-cyclic-term" value="I"><span>I</span></label>
+                                    <label><input type="radio" name="tune-center-cyclic-term" value="D"><span>D</span></label>
+                                </div>
+                            </fieldset>
+
+                            <div class="alert alert-info tune-center-comparison-boundary" role="note">
+                                <strong>Measurement preview.</strong> Baseline and test must use the same axis, PID term, controlled maneuver, and comparable flight conditions. Rotorflight 4.6 logs do not contain the complete mixer and servo-limit configuration needed to rule out saturation, so the app measures each range but withholds a better/worse outcome until matching configuration-snapshot support is added.
+                                This first capture release measures matched roll/pitch P or D stop behavior. I needs a sustained-hold test, and yaw needs separately validated clockwise/counter-clockwise evidence, so those choices remain withheld for now.
                             </div>
-                            <div class="tune-advisor-mechanical"></div>
+
+                            <div class="tune-center-capture-grid">
+                                <article class="tune-center-capture-slot" data-cyclic-slot="baseline">
+                                    <div class="tune-center-capture-heading">
+                                        <h6>Baseline</h6>
+                                        <span class="label label-default" data-cyclic-slot-status="baseline">Comparison required</span>
+                                    </div>
+                                    <p class="tune-center-cyclic-baseline" data-cyclic-slot-summary="baseline">No baseline capture is attached.</p>
+                                    <button type="button" class="btn btn-default" data-cyclic-capture="baseline" disabled>Save current I/O as baseline</button>
+                                </article>
+                                <article class="tune-center-capture-slot" data-cyclic-slot="test">
+                                    <div class="tune-center-capture-heading">
+                                        <h6>Test</h6>
+                                        <span class="label label-default" data-cyclic-slot-status="test">Comparison required</span>
+                                    </div>
+                                    <p class="tune-center-cyclic-test" data-cyclic-slot-summary="test">Save a baseline before attaching a test capture.</p>
+                                    <button type="button" class="btn btn-default" data-cyclic-capture="test" disabled>Save current I/O as test</button>
+                                </article>
+                            </div>
+                            <div class="tune-center-cyclic-actions">
+                                <button type="button" class="btn btn-default" data-cyclic-clear disabled>Clear comparison</button>
+                            </div>
+                            <p class="tune-center-cyclic-status" role="status" aria-live="polite" aria-atomic="true">Comparison required: save a baseline and a test explicitly.</p>
+                            <section class="tune-center-cyclic-evidence" data-cyclic-comparison-evidence aria-labelledby="tune-center-cyclic-evidence-heading" hidden>
+                                <div class="tune-center-section-heading">
+                                    <h6 id="tune-center-cyclic-evidence-heading">Baseline → test evidence</h6>
+                                    <span class="label label-default" data-cyclic-comparison-status>Comparison required</span>
+                                </div>
+                                <p class="tune-center-cyclic-evidence-summary" data-cyclic-comparison-summary></p>
+                                <div class="tune-center-cyclic-metrics" data-cyclic-comparison-metrics></div>
+                                <ul class="tune-center-cyclic-reasons" data-cyclic-comparison-reasons></ul>
+                                <p class="tune-center-cyclic-evidence-boundary">Measurement evidence only. This module does not choose a PID direction or value and cannot write a setting.</p>
+                            </section>
                         </section>
 
-                        <section class="tune-advisor-section tune-advisor-withheld-section" aria-labelledby="tune-advisor-withheld-heading" hidden>
-                            <div class="tune-advisor-section-heading">
-                                <h5 id="tune-advisor-withheld-heading">Why Governor F is withheld</h5>
-                                <span class="label label-default">PREREQUISITES</span>
+                        <section class="tune-center-view" data-tune-center-view="governor" aria-labelledby="tune-center-governor-heading" hidden>
+                            <div class="tune-center-detail-heading">
+                                <button type="button" class="btn btn-default tune-center-back" data-tune-center-back aria-label="Back to Tune Center modules">
+                                    <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span> Back
+                                </button>
+                                <div>
+                                    <p class="tune-center-detail-kicker">GOVERNOR</p>
+                                    <h5 id="tune-center-governor-heading" tabindex="-1" data-tune-center-heading>Governor F</h5>
+                                </div>
                             </div>
-                            <div class="tune-advisor-withheld-reasons"></div>
+                            <section class="tune-advisor-confirmations" aria-labelledby="tune-advisor-confirmations-heading">
+                                <div class="tune-advisor-section-heading">
+                                    <h5 id="tune-advisor-confirmations-heading">Governor F readiness</h5>
+                                    <span class="tune-advisor-confirmation-count label label-default">Not confirmed</span>
+                                </div>
+                                <p class="tune-advisor-confirmation-intro">
+                                    One flight-readiness acknowledgment is required only before directional Governor F advice. It stays in this app session, resets when the log or selected setup changes, and never authorizes a settings write.
+                                </p>
+                                <fieldset class="tune-advisor-confirmation-list" disabled>
+                                    <legend class="sr-only">Flight-readiness acknowledgment for Governor F advice</legend>
+                                    <div class="tune-advisor-user-input">
+                                        <label for="tune-advisor-governor-max-throttle">Configured Governor Maximum Throttle (%)</label>
+                                        <input type="number" class="form-control" id="tune-advisor-governor-max-throttle" min="10" max="100" step="1" inputmode="numeric" autocomplete="off" required data-user-input="governorMaxThrottlePct" aria-describedby="tune-advisor-governor-max-throttle-help">
+                                        <small id="tune-advisor-governor-max-throttle-help">
+                                            Required whole-number value from 10% through 100%. It must match the active aircraft profile; Blackbox does not log this per-profile setting.
+                                        </small>
+                                    </div>
+                                    <label class="tune-advisor-confirmation-item">
+                                        <input type="checkbox" data-flight-ready-confirmation>
+                                        <span>
+                                            <strong>I confirm this aircraft and test are flight-ready</strong>
+                                            <small>I verified the mechanical condition, RPM/gearing, power system, active aircraft profile with no change before In, and conservative governed setup. The site, weather, pilot readiness, bailout plan, and pitch-pump maneuver are safe.</small>
+                                        </span>
+                                    </label>
+                                </fieldset>
+                                <p class="tune-advisor-confirmation-status" role="status" aria-live="polite" aria-atomic="true">
+                                    Analyze the selected range once to identify its configuration before confirming flight readiness.
+                                </p>
+                            </section>
+                            <p class="tune-center-module-empty" data-tune-center-empty="governor">Analyze the selected range to evaluate Governor F prerequisites.</p>
+                            <div class="tune-advisor-results" hidden>
+                                <section class="tune-advisor-section tune-advisor-withheld-section" aria-labelledby="tune-advisor-withheld-heading" hidden>
+                                    <div class="tune-advisor-section-heading">
+                                        <h5 id="tune-advisor-withheld-heading">Why Governor F is withheld</h5>
+                                        <span class="label label-default">PREREQUISITES</span>
+                                    </div>
+                                    <div class="tune-advisor-withheld-reasons"></div>
+                                </section>
+
+                                <section class="tune-advisor-section tune-advisor-recommendation-section" aria-labelledby="tune-advisor-recommendation-heading" hidden>
+                                    <div class="tune-advisor-section-heading">
+                                        <h5 id="tune-advisor-recommendation-heading">Governor F next controlled test</h5>
+                                        <span class="label label-warning tune-advisor-experimental-label">EXPERIMENTAL · MANUAL REVIEW</span>
+                                    </div>
+                                    <div class="tune-advisor-recommendation"></div>
+                                </section>
+                            </div>
                         </section>
 
-                        <section class="tune-advisor-section tune-advisor-recommendation-section" aria-labelledby="tune-advisor-recommendation-heading" hidden>
-                            <div class="tune-advisor-section-heading">
-                                <h5 id="tune-advisor-recommendation-heading">Governor F next controlled test</h5>
-                                <span class="label label-warning tune-advisor-experimental-label">EXPERIMENTAL · MANUAL REVIEW</span>
+                        <section class="tune-center-view" data-tune-center-view="mechanical" aria-labelledby="tune-center-mechanical-heading" hidden>
+                            <div class="tune-center-detail-heading">
+                                <button type="button" class="btn btn-default tune-center-back" data-tune-center-back aria-label="Back to Tune Center modules">
+                                    <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span> Back
+                                </button>
+                                <div>
+                                    <p class="tune-center-detail-kicker">MECHANICAL</p>
+                                    <h5 id="tune-center-mechanical-heading" tabindex="-1" data-tune-center-heading>Mechanical &amp; vibration</h5>
+                                </div>
                             </div>
-                            <div class="tune-advisor-recommendation"></div>
+                            <p class="tune-center-module-empty" data-tune-center-empty="mechanical">Analyze the selected range to inspect its vibration evidence.</p>
+                            <div class="tune-advisor-results" hidden>
+                                <section class="tune-advisor-section tune-advisor-mechanical-section" aria-labelledby="tune-advisor-mechanical-heading" hidden>
+                                    <div class="tune-advisor-section-heading">
+                                        <h5 id="tune-advisor-mechanical-heading">Mechanical / vibration evidence</h5>
+                                        <span class="tune-advisor-mechanical-status label label-default"></span>
+                                    </div>
+                                    <div class="alert alert-info tune-advisor-mechanical-limit" role="note">
+                                        Spectrum patterns are inspection clues, not a component diagnosis. This analysis does not recommend PID or Governor changes; inspect the mechanics first.
+                                    </div>
+                                    <div class="tune-advisor-mechanical"></div>
+                                </section>
+                            </div>
                         </section>
 
-                        <section class="tune-advisor-section" aria-labelledby="tune-advisor-measurements-heading">
-                            <div class="tune-advisor-section-heading">
-                                <h5 id="tune-advisor-measurements-heading">Measured evidence</h5>
+                        <section class="tune-center-view" data-tune-center-view="report" aria-labelledby="tune-center-report-heading" hidden>
+                            <div class="tune-center-detail-heading">
+                                <button type="button" class="btn btn-default tune-center-back" data-tune-center-back aria-label="Back to Tune Center modules">
+                                    <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span> Back
+                                </button>
+                                <div>
+                                    <p class="tune-center-detail-kicker">EXACT RANGE</p>
+                                    <h5 id="tune-center-report-heading" tabindex="-1" data-tune-center-heading>Selected-range report</h5>
+                                </div>
                             </div>
-                            <div class="tune-advisor-measurements row"></div>
-                        </section>
+                            <p class="tune-center-module-empty" data-tune-center-empty="report">Analyze the selected range to build its evidence report.</p>
+                            <div class="tune-advisor-results" hidden>
+                                <section class="tune-advisor-section" aria-labelledby="tune-advisor-findings-heading">
+                                    <div class="tune-advisor-section-heading">
+                                        <h5 id="tune-advisor-findings-heading">What deserves attention</h5>
+                                        <span class="tune-advisor-overall-status label label-default"></span>
+                                    </div>
+                                    <div class="tune-advisor-findings"></div>
+                                </section>
 
-                        <section class="tune-advisor-section tune-advisor-ai-section" aria-labelledby="tune-advisor-ai-heading" hidden>
-                            <div class="tune-advisor-section-heading">
-                                <h5 id="tune-advisor-ai-heading">AI Coach for this selected range</h5>
-                                <span class="label label-info tune-advisor-ai-badge">ON DEVICE</span>
+                                <section class="tune-advisor-section" aria-labelledby="tune-advisor-measurements-heading">
+                                    <div class="tune-advisor-section-heading">
+                                        <h5 id="tune-advisor-measurements-heading">Measured evidence</h5>
+                                    </div>
+                                    <div class="tune-advisor-measurements row"></div>
+                                </section>
+
+                                <section class="tune-advisor-section tune-advisor-ai-section" aria-labelledby="tune-advisor-ai-heading" hidden>
+                                    <div class="tune-advisor-section-heading">
+                                        <h5 id="tune-advisor-ai-heading">AI Coach for this selected range</h5>
+                                        <span class="label label-info tune-advisor-ai-badge">ON DEVICE</span>
+                                    </div>
+                                    <div class="tune-advisor-ai-boundary" role="note">
+                                        <strong>Private and bounded.</strong>
+                                        The model runs on this phone and receives only validated status, reason, and bounded code choices from the exact graph In/Out range above—not the raw log, settings, identity, or measured fact values. AI chooses which allowed validated finding and next step appear first; native code creates and validates every displayed card. It cannot create or override tuning advice and never writes flight-controller settings.
+                                    </div>
+                                    <p class="tune-advisor-ai-download-note">
+                                        The first use needs an approximately 329 MiB one-time model download. Wi-Fi is recommended.
+                                    </p>
+                                    <p class="tune-advisor-ai-status" role="status" aria-live="polite" aria-atomic="true">
+                                        Checking on-device AI availability…
+                                    </p>
+                                    <div class="tune-advisor-ai-result" aria-live="polite" hidden></div>
+                                    <button type="button" class="btn btn-info tune-advisor-ai-action" disabled aria-describedby="tune-advisor-ai-heading">
+                                        Check AI Coach
+                                    </button>
+                                </section>
                             </div>
-                            <div class="tune-advisor-ai-boundary" role="note">
-                                <strong>Private and bounded.</strong>
-                                The model runs on this phone and receives only validated status, reason, and bounded code choices from the exact graph In/Out range above—not the raw log, settings, identity, or measured fact values. AI chooses which allowed validated finding and next step appear first; native code creates and validates every displayed card. It cannot create or override tuning advice and never writes flight-controller settings.
-                            </div>
-                            <p class="tune-advisor-ai-download-note">
-                                The first use needs an approximately 329 MiB one-time model download. Wi-Fi is recommended.
-                            </p>
-                            <p class="tune-advisor-ai-status" role="status" aria-live="polite" aria-atomic="true">
-                                Checking on-device AI availability…
-                            </p>
-                            <div class="tune-advisor-ai-result" aria-live="polite" hidden></div>
-                            <button type="button" class="btn btn-info tune-advisor-ai-action" disabled aria-describedby="tune-advisor-ai-heading">
-                                Check AI Coach
-                            </button>
                         </section>
                     </div>
                 </div>
@@ -3617,7 +3769,7 @@
     <script src="js/craft_3d.js"></script>
     <script src="js/flightlog_fielddefs.js"></script>
     <script src="js/flightlog_fields_presenter.js"></script>
-    <script src="js/flightlog_parser.js"></script>
+    <script src="js/flightlog_parser.js?v=124"></script>
     <script src="js/flightlog_index.js"></script>
     <script src="js/flightlog.js"></script>
     <script src="js/grapher.js"></script>
@@ -3643,15 +3795,16 @@
     <script src="js/laptimer.js"></script>
     <script src="js/localization.js"></script>
     <script src="js/default_workspaces.js"></script>
-    <script src="js/advisor/evidence_contract.js?v=121"></script>
-    <script src="js/advisor/deterministic_metrics.js?v=121"></script>
-    <script src="js/advisor/rules.js?v=121"></script>
-    <script src="js/advisor/flightlog_adapter.js?v=121"></script>
-    <script src="js/advisor/mechanical_analysis.js?v=121"></script>
-    <script src="js/advisor/ai_contract.js?v=121"></script>
-    <script src="js/advisor/advisor_ui.js?v=121"></script>
-    <script src="js/main.js?v=121"></script>
-    <script src="index.js?v=121"></script>
+    <script src="js/advisor/evidence_contract.js?v=124"></script>
+    <script src="js/advisor/deterministic_metrics.js?v=124"></script>
+    <script src="js/advisor/rules.js?v=124"></script>
+    <script src="js/advisor/flightlog_adapter.js?v=124"></script>
+    <script src="js/advisor/mechanical_analysis.js?v=124"></script>
+    <script src="js/advisor/ai_contract.js?v=124"></script>
+    <script src="js/advisor/cyclic_pid_analysis.js?v=124"></script>
+    <script src="js/advisor/advisor_ui.js?v=124"></script>
+    <script src="js/main.js?v=124"></script>
+    <script src="index.js?v=124"></script>
 
     <dialog class="dialogUpdate">
         <h3 i18n="noticeTitle"></h3>
