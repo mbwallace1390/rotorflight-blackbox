@@ -19,6 +19,7 @@ required by `docs/release-compliance.md`.
 | AndroidX Activity | 1.13.0 | Apache-2.0 | resolved AAR `META-INF/androidx/activity/activity/LICENSE.txt` |
 | AndroidX WebKit | 1.16.0 | Apache-2.0 | resolved AAR `META-INF/androidx/webkit/webkit/LICENSE.txt` |
 | complex.js and real.js | checked-in revision | BSD-2-Clause | complete headers in `js/complex.js` and `js/real.js` |
+| Propwash analysis design | commit `804d3d5dd447c2e6067b02b7e1723aae8a19d5ff` | MIT | pinned upstream `LICENSE` and analysis sources |
 
 ### Copyright and attribution notices
 
@@ -34,6 +35,10 @@ required by `docs/release-compliance.md`.
 - AndroidX Activity and AndroidX WebKit: The Android Open Source Project.
 - complex.js and real.js: Copyright (c) 2012 Jens Nockert
   <jens@ofmlabs.org>, Jussi Kalliokoski <jussi@ofmlabs.org>.
+- Propwash: Copyright (c) 2026 Iteratrix. RotorLens's selected-range
+  mechanical analysis adapts the time-alignment and overlapping Hann-spectrum
+  design documented in Propwash's `analysis/util.rs` and `analysis/fft.rs` at
+  commit `804d3d5dd447c2e6067b02b7e1723aae8a19d5ff`.
 
 The notices above are transcribed from the verified sources in the table.
 

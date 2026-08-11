@@ -9,6 +9,13 @@
         governor: "Measuring governor response",
         findings: "Building evidence-backed findings"
     };
+    var MECHANICAL_PHASES = ["collect", "resample", "spectrum", "findings"];
+    var MECHANICAL_PHASE_LABELS = {
+        collect: "Collecting selected-range gyro evidence",
+        resample: "Aligning selected-range gyro samples",
+        spectrum: "Measuring selected-range vibration spectrum",
+        findings: "Checking spectrum evidence"
+    };
     var CONFIRMATION_DEFINITIONS = Object.freeze([
         { key: "mechanicalInspection" },
         { key: "powerSystemHealthy" },
@@ -98,13 +105,18 @@
         CONFIRMATION_RPM_AND_GEARING_REQUIRED: "Confirm the RPM sensor, motor poles or magnets, and gearing values.",
         CONFIRMATION_CORRECT_PROFILE_REQUIRED: "Confirm the aircraft/profile provenance and no settings change before In.",
         CONFIRMATION_OFFICIAL_TEST_SETUP_REQUIRED: "Confirm the governed mode and conservative experimental TTA/P/I/D test setup.",
-        CONFIRMATION_SAFE_PITCH_PUMPS_REQUIRED: "Confirm the controlled pitch-pump test is safe to perform."
+        CONFIRMATION_SAFE_PITCH_PUMPS_REQUIRED: "Confirm the controlled pitch-pump test is safe to perform.",
+        MECHANICAL_ANALYSIS_REQUIRED: "Complete exact-range mechanical analysis before Governor F direction can be evaluated.",
+        MECHANICAL_ANALYSIS_INSUFFICIENT: "The selected range did not provide enough mechanical evidence, so Governor F direction remains withheld.",
+        MECHANICAL_ATTENTION_IN_SELECTION: "Selected-range vibration evidence requires a mechanics-first inspection before Governor F advice.",
+        MECHANICAL_ANALYSIS_UNAVAILABLE: "Selected-range mechanical analysis was unavailable, so Governor F direction remains withheld."
     });
 
     var currentLog = null;
     var currentContext = {};
     var currentPackage = null;
     var currentPackageRange = null;
+    var currentMechanicalState = null;
     var activeJob = null;
     var generation = 0;
     var isBound = false;
@@ -137,6 +149,9 @@
     var withheldReasonsContainer;
     var recommendationSection;
     var recommendationContainer;
+    var mechanicalSection;
+    var mechanicalStatus;
+    var mechanicalContainer;
 
     function cacheElements() {
         if (modal && modal.length) {
@@ -167,6 +182,9 @@
         withheldReasonsContainer = modal.find(".tune-advisor-withheld-reasons");
         recommendationSection = modal.find(".tune-advisor-recommendation-section");
         recommendationContainer = modal.find(".tune-advisor-recommendation");
+        mechanicalSection = modal.find(".tune-advisor-mechanical-section");
+        mechanicalStatus = modal.find(".tune-advisor-mechanical-status");
+        mechanicalContainer = modal.find(".tune-advisor-mechanical");
         return true;
     }
 
@@ -525,6 +543,30 @@
         return ((phaseIndex + ratio) / PHASES.length) * 100;
     }
 
+    function mechanicalProgressPercent(progress) {
+        var phaseIndex = MECHANICAL_PHASES.indexOf(progress && progress.phase);
+        if (phaseIndex < 0) {
+            return 0;
+        }
+
+        var ratio = 0;
+        if (isFiniteNumber(progress.total) && progress.total > 0 && isFiniteNumber(progress.completed)) {
+            ratio = Math.max(0, Math.min(1, progress.completed / progress.total));
+        }
+        return ((phaseIndex + ratio) / MECHANICAL_PHASES.length) * 28;
+    }
+
+    function clearMechanicalPresentation() {
+        if (!mechanicalSection || !mechanicalSection.length) {
+            return;
+        }
+        mechanicalSection.attr("hidden", true);
+        mechanicalStatus
+            .removeClass("status-clear status-attention status-insufficient")
+            .empty();
+        mechanicalContainer.empty();
+    }
+
     function showError(message) {
         if (!cacheElements()) {
             return;
@@ -536,6 +578,8 @@
         withheldReasonsContainer.empty();
         recommendationSection.attr("hidden", true);
         recommendationContainer.empty();
+        currentMechanicalState = null;
+        clearMechanicalPresentation();
         errorBox.text(message || "Tune Advisor could not analyze this log.");
         errorBox.removeAttr("hidden");
         rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
@@ -559,6 +603,7 @@
         withheldReasonsContainer.empty();
         recommendationSection.attr("hidden", true);
         recommendationContainer.empty();
+        clearMechanicalPresentation();
         overallStatus.removeClass("status-pass status-caution status-blocked").empty();
         progressContainer.removeAttr("hidden");
         setProgress(currentLog ? "Ready to analyze this log." : "Open a log to begin.", 0);
@@ -752,6 +797,829 @@
         }
     }
 
+    function numberInRange(value, minimum, maximum) {
+        return isFiniteNumber(value) && value >= minimum && value <= maximum;
+    }
+
+    function integerInRange(value, minimum, maximum) {
+        return Number.isInteger(value) && value >= minimum && value <= maximum;
+    }
+
+    function ratioInRange(value, minimum) {
+        return numberInRange(value, minimum === undefined ? 0 : minimum, 1);
+    }
+
+    function approximatelyEqual(left, right, tolerance) {
+        return isFiniteNumber(left)
+            && isFiniteNumber(right)
+            && Math.abs(left - right) <= tolerance;
+    }
+
+    function validMechanicalReasonCodes(reasonCodes, requireOne) {
+        if (!Array.isArray(reasonCodes)
+                || (requireOne && reasonCodes.length === 0)
+                || reasonCodes.length > 16) {
+            return false;
+        }
+        var seen = Object.create(null);
+        return reasonCodes.every(function(code) {
+            return typeof code === "string"
+                && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)
+                && !seen[code]
+                && (seen[code] = true);
+        });
+    }
+
+    function validMechanicalCoverage(item, minimumCoverage) {
+        return item
+            && integerInRange(item.totalPossibleWindowCount, 1, 4096)
+            && integerInRange(item.validWindowCount, 1, item.totalPossibleWindowCount)
+            && ratioInRange(item.validWindowCoverageRatio, minimumCoverage)
+            && ratioInRange(item.finiteSampleCoverageRatio, minimumCoverage)
+            && ratioInRange(item.finiteTimeSpanCoverageRatio, minimumCoverage);
+    }
+
+    function expectedMechanicalWindowCount(resampledSampleCount, windowSize) {
+        if (!Number.isInteger(resampledSampleCount)
+                || !Number.isInteger(windowSize)
+                || resampledSampleCount < windowSize) {
+            return 0;
+        }
+        return Math.floor(
+            (resampledSampleCount - windowSize) / (windowSize / 2)
+        ) + 1;
+    }
+
+    function validMechanicalQualityTimeline(quality, range, minimumCoverage) {
+        var durationUs = range.endTimeUs - range.startTimeUs;
+        var selectedSpanUs = quality.lastSelectedSampleTimeUs
+            - quality.firstSelectedSampleTimeUs;
+        var resampledSpanUs = quality.resampledEndTimeUs
+            - quality.resampledStartTimeUs;
+        var selectedCoverage = selectedSpanUs / durationUs;
+        var resampledCoverage = resampledSpanUs / durationUs;
+        var sourceRateSpanUs = (quality.sourceSampleCount - 1)
+            * 1000000 / quality.measuredSampleRateHz;
+        var resampledRateSpanUs = (quality.resampledSampleCount - 1)
+            * 1000000 / quality.resampledRateHz;
+        var sourceToleranceUs = Math.max(
+            2 * 1000000 / quality.measuredSampleRateHz,
+            durationUs * 0.1
+        );
+        var uniformToleranceUs = Math.max(2, durationUs * 0.0001);
+
+        return numberInRange(
+            quality.firstSelectedSampleTimeUs,
+            range.startTimeUs,
+            range.endTimeUs
+        )
+            && numberInRange(
+                quality.lastSelectedSampleTimeUs,
+                quality.firstSelectedSampleTimeUs,
+                range.endTimeUs
+            )
+            && numberInRange(quality.leadingSelectedGapUs, 0, durationUs)
+            && numberInRange(quality.trailingSelectedGapUs, 0, durationUs)
+            && approximatelyEqual(
+                quality.leadingSelectedGapUs,
+                quality.firstSelectedSampleTimeUs - range.startTimeUs,
+                0.01
+            )
+            && approximatelyEqual(
+                quality.trailingSelectedGapUs,
+                range.endTimeUs - quality.lastSelectedSampleTimeUs,
+                0.01
+            )
+            && approximatelyEqual(
+                quality.leadingSelectedGapUs + selectedSpanUs
+                    + quality.trailingSelectedGapUs,
+                durationUs,
+                0.02
+            )
+            && ratioInRange(quality.selectedTimestampSpanCoverageRatio, minimumCoverage)
+            && approximatelyEqual(
+                quality.selectedTimestampSpanCoverageRatio,
+                selectedCoverage,
+                0.002
+            )
+            && Math.abs(sourceRateSpanUs - selectedSpanUs) <= sourceToleranceUs
+            && quality.resampledStartTimeUs === range.startTimeUs
+            && numberInRange(
+                quality.resampledEndTimeUs,
+                quality.resampledStartTimeUs,
+                range.endTimeUs
+            )
+            && numberInRange(quality.resampledTimeSpanUs, 0, durationUs)
+            && approximatelyEqual(
+                quality.resampledTimeSpanUs,
+                resampledSpanUs,
+                0.01
+            )
+            && ratioInRange(quality.resampledRangeCoverageRatio, minimumCoverage)
+            && approximatelyEqual(
+                quality.resampledRangeCoverageRatio,
+                resampledCoverage,
+                0.002
+            )
+            && Math.abs(resampledRateSpanUs - resampledSpanUs) <= uniformToleranceUs;
+    }
+
+    function validMechanicalAxisTimeline(
+        axis,
+        quality,
+        range,
+        minimumCoverage,
+        requireSampleCount
+    ) {
+        var durationUs = range.endTimeUs - range.startTimeUs;
+        var finiteSpanUs = axis.lastFiniteSampleTimeUs - axis.firstFiniteSampleTimeUs;
+        return numberInRange(
+            axis.firstFiniteSampleTimeUs,
+            quality.resampledStartTimeUs,
+            quality.resampledEndTimeUs
+        )
+            && numberInRange(
+                axis.lastFiniteSampleTimeUs,
+                axis.firstFiniteSampleTimeUs,
+                quality.resampledEndTimeUs
+            )
+            && numberInRange(axis.leadingFiniteGapUs, 0, durationUs)
+            && numberInRange(axis.trailingFiniteGapUs, 0, durationUs)
+            && approximatelyEqual(
+                axis.leadingFiniteGapUs,
+                axis.firstFiniteSampleTimeUs - range.startTimeUs,
+                0.01
+            )
+            && approximatelyEqual(
+                axis.trailingFiniteGapUs,
+                range.endTimeUs - axis.lastFiniteSampleTimeUs,
+                0.01
+            )
+            && ratioInRange(axis.finiteTimeSpanCoverageRatio, minimumCoverage)
+            && approximatelyEqual(
+                axis.finiteTimeSpanCoverageRatio,
+                finiteSpanUs / durationUs,
+                0.002
+            )
+            && (!requireSampleCount || approximatelyEqual(
+                axis.finiteSampleCoverageRatio,
+                axis.sampleCount / quality.resampledSampleCount,
+                0.002
+            ));
+    }
+
+    function validMechanicalHarmonicMatch(match, maximumFrequencyHz) {
+        if (match === null) {
+            return true;
+        }
+        if (!match || typeof match !== "object"
+                || (match.rotor !== "main" && match.rotor !== "tail")) {
+            return false;
+        }
+        var maximumOrder = match.rotor === "main" ? 8 : 6;
+        return integerInRange(match.order, 1, maximumOrder)
+            && numberInRange(match.predictedHz, 0, maximumFrequencyHz + 100)
+            && numberInRange(match.deltaHz, 0, maximumFrequencyHz)
+            && numberInRange(match.toleranceHz, 0.01, maximumFrequencyHz)
+            && match.deltaHz <= match.toleranceHz;
+    }
+
+    function validMechanicalPeak(peak, axis, quality) {
+        if (!peak || typeof peak !== "object") {
+            return false;
+        }
+        var evaluatedWindows = peak.evaluatedWindowCount;
+        var requiredWindows = Number.isInteger(evaluatedWindows)
+            ? Math.max(3, Math.ceil(evaluatedWindows * 0.25))
+            : Infinity;
+        var expectedAttentionEligible = integerInRange(
+            peak.attentionSupportingWindowCount,
+            0,
+            evaluatedWindows
+        )
+            && peak.attentionSupportingWindowCount >= requiredWindows
+            && peak.attentionTemporalSpanRatio >= 0.5
+            && peak.attentionOccupiedBucketCount >= 3
+            && peak.attentionMaximumGapRatio <= 0.35;
+        var expectedMaximumHz = Math.min(1000, quality.resampledRateHz * 0.45);
+
+        return numberInRange(peak.frequencyHz, 5, expectedMaximumHz)
+            && numberInRange(peak.psdDps2PerHz, 0, 10000000000)
+            && numberInRange(peak.localNoisePsdDps2PerHz, 0, 10000000000)
+            && numberInRange(peak.relativePowerDb, 8, 1000)
+            && numberInRange(peak.prominenceDb, 8, 1000)
+            && numberInRange(
+                peak.bandwidthHz,
+                Math.max(0.01, quality.frequencyResolutionHz - 0.01),
+                quality.resampledRateHz / 2
+            )
+            && numberInRange(peak.bandPowerDps2, 0, 10000000000)
+            && numberInRange(peak.bandRmsDps, 0, 100000)
+            && integerInRange(peak.supportingWindowCount, 3, evaluatedWindows)
+            && evaluatedWindows === axis.windowCount
+            && ratioInRange(peak.persistenceRatio, 0.25)
+            && approximatelyEqual(
+                peak.persistenceRatio,
+                peak.supportingWindowCount / evaluatedWindows,
+                0.002
+            )
+            && integerInRange(peak.attentionSupportingWindowCount, 0, evaluatedWindows)
+            && ratioInRange(peak.attentionPersistenceRatio, 0)
+            && approximatelyEqual(
+                peak.attentionPersistenceRatio,
+                peak.attentionSupportingWindowCount / evaluatedWindows,
+                0.002
+            )
+            && ratioInRange(peak.attentionTemporalSpanRatio, 0)
+            && integerInRange(peak.attentionOccupiedBucketCount, 0, 4)
+            && ratioInRange(peak.attentionMaximumGapRatio, 0)
+            && typeof peak.attentionEligible === "boolean"
+            && peak.attentionEligible === expectedAttentionEligible
+            && validMechanicalHarmonicMatch(peak.harmonicMatch, expectedMaximumHz);
+    }
+
+    function validAcceptedMechanicalAxis(axis, quality, seenAxes, range) {
+        var expectedAmplitudeKinds = {
+            gyroRAW: "unfiltered-gyro-output",
+            gyroUnfilt: "unfiltered-gyro-output",
+            "gyroADC-filtered": "filtered-gyro-output"
+        };
+        if (!axis || typeof axis !== "object"
+                || ["roll", "pitch", "yaw"].indexOf(axis.axis) < 0
+                || seenAxes[axis.axis]
+                || !Object.prototype.hasOwnProperty.call(expectedAmplitudeKinds, axis.source)
+                || axis.amplitudeKind !== expectedAmplitudeKinds[axis.source]
+                || axis.available !== true
+                || !integerInRange(axis.sampleCount, quality.windowSize, quality.resampledSampleCount)
+                || !numberInRange(axis.rmsDps, 0, 100000)
+                || !numberInRange(axis.broadbandPowerDps2, 0, 10000000000)
+                || !numberInRange(axis.broadbandRmsDps, 0, 100000)
+                || !numberInRange(axis.medianNoisePsdDps2PerHz, 0, 10000000000)
+                || !integerInRange(axis.windowCount, 3, 128)
+                || !integerInRange(axis.candidateWindowCount, axis.windowCount, 4096)
+                || !ratioInRange(axis.windowCoverageRatio, 0)
+                || !approximatelyEqual(
+                    axis.windowCoverageRatio,
+                    axis.windowCount / axis.candidateWindowCount,
+                    0.002
+                )
+                || !validMechanicalCoverage(axis, 0.75)
+                || axis.validWindowCount !== axis.candidateWindowCount
+                || axis.windowCount > axis.validWindowCount
+                || axis.totalPossibleWindowCount !== expectedMechanicalWindowCount(
+                    quality.resampledSampleCount,
+                    quality.windowSize
+                )
+                || axis.windowCount !== Math.min(axis.validWindowCount, 128)
+                || !validMechanicalAxisTimeline(axis, quality, range, 0.75, true)
+                || !Array.isArray(axis.peaks)
+                || axis.peaks.length > 5) {
+            return false;
+        }
+        seenAxes[axis.axis] = true;
+        return axis.peaks.every(function(peak) {
+            return validMechanicalPeak(peak, axis, quality);
+        });
+    }
+
+    function validAcceptedMechanicalResult(mechanicalResult) {
+        var quality = mechanicalResult.quality;
+        var range = mechanicalResult.range;
+        var expectedTotalPossibleWindowCount = expectedMechanicalWindowCount(
+            quality && quality.resampledSampleCount,
+            quality && quality.windowSize
+        );
+        if (mechanicalResult.available !== true
+                || typeof mechanicalResult.attention !== "boolean"
+                || !quality || typeof quality !== "object"
+                || quality.status !== "accepted"
+                || !integerInRange(quality.sourceSampleCount, 256, 262144)
+                || range.sampleCount !== quality.sourceSampleCount
+                || !numberInRange(quality.measuredSampleRateHz, 50, 8000)
+                || !numberInRange(quality.resampledRateHz, 50, 8000)
+                || !integerInRange(quality.resampledSampleCount, 256, 262144)
+                || [256, 512, 1024, 2048, 4096].indexOf(quality.windowSize) < 0
+                || quality.overlapSamples !== quality.windowSize / 2
+                || !integerInRange(quality.windowCount, 3, 128)
+                || !validMechanicalCoverage(quality, 0.75)
+                || !validMechanicalQualityTimeline(quality, range, 0.75)
+                || quality.windowCount > quality.validWindowCount
+                || expectedTotalPossibleWindowCount < 3
+                || quality.totalPossibleWindowCount !== expectedTotalPossibleWindowCount
+                || quality.minimumCoverageRatio !== 0.75
+                || quality.maximumWelchWindowsPerAxis !== 128
+                || quality.attentionBandRmsThresholdDps !== 8
+                || !numberInRange(quality.frequencyResolutionHz, 0.01, 31.25)
+                || !approximatelyEqual(
+                    quality.frequencyResolutionHz,
+                    quality.resampledRateHz / quality.windowSize,
+                    0.002
+                )
+                || !numberInRange(
+                    quality.maximumAnalyzedFrequencyHz,
+                    5,
+                    Math.min(1000, quality.resampledRateHz * 0.45) + 0.01
+                )
+                || !Array.isArray(mechanicalResult.axes)
+                || mechanicalResult.axes.length < 1
+                || mechanicalResult.axes.length > 3) {
+            return false;
+        }
+
+        var seenAxes = Object.create(null);
+        if (!mechanicalResult.axes.every(function(axis) {
+            return validAcceptedMechanicalAxis(axis, quality, seenAxes, range);
+        })) {
+            return false;
+        }
+        var minimumWindowCount = Math.min.apply(null, mechanicalResult.axes.map(function(axis) {
+            return axis.windowCount;
+        }));
+        var minimumTotalWindowCount = Math.min.apply(null, mechanicalResult.axes.map(function(axis) {
+            return axis.totalPossibleWindowCount;
+        }));
+        var minimumValidWindowCount = Math.min.apply(null, mechanicalResult.axes.map(function(axis) {
+            return axis.validWindowCount;
+        }));
+        var minimumValidCoverage = Math.min.apply(null, mechanicalResult.axes.map(function(axis) {
+            return axis.validWindowCoverageRatio;
+        }));
+        var minimumSampleCoverage = Math.min.apply(null, mechanicalResult.axes.map(function(axis) {
+            return axis.finiteSampleCoverageRatio;
+        }));
+        var minimumTimeCoverage = Math.min.apply(null, mechanicalResult.axes.map(function(axis) {
+            return axis.finiteTimeSpanCoverageRatio;
+        }));
+        if (quality.windowCount !== minimumWindowCount
+                || quality.totalPossibleWindowCount !== minimumTotalWindowCount
+                || quality.validWindowCount !== minimumValidWindowCount
+                || !approximatelyEqual(quality.validWindowCoverageRatio, minimumValidCoverage, 0.002)
+                || !approximatelyEqual(quality.finiteSampleCoverageRatio, minimumSampleCoverage, 0.002)
+                || !approximatelyEqual(quality.finiteTimeSpanCoverageRatio, minimumTimeCoverage, 0.002)) {
+            return false;
+        }
+
+        var hasAttentionPeak = mechanicalResult.axes.some(function(axis) {
+            return axis.peaks.some(function(peak) { return peak.attentionEligible === true; });
+        });
+        var clearSourcesVerified = mechanicalResult.status !== "clear"
+            || mechanicalResult.axes.length === 3
+                && mechanicalResult.axes.every(function(axis) {
+                    return axis.source === "gyroRAW" || axis.source === "gyroUnfilt";
+                });
+        return clearSourcesVerified
+            && mechanicalResult.attention === (mechanicalResult.status === "attention")
+            && hasAttentionPeak === (mechanicalResult.status === "attention");
+    }
+
+    function validInsufficientMechanicalResult(mechanicalResult) {
+        var quality = mechanicalResult.quality;
+        var range = mechanicalResult.range;
+        var expectedTotalPossibleWindowCount = expectedMechanicalWindowCount(
+            quality && quality.resampledSampleCount,
+            quality && quality.windowSize
+        );
+        if (mechanicalResult.available !== false
+                || mechanicalResult.attention !== false
+                || !quality || typeof quality !== "object"
+                || quality.status !== "insufficient"
+                || quality.minimumCoverageRatio !== 0.75
+                || quality.attentionBandRmsThresholdDps !== 8
+                || !integerInRange(quality.sourceSampleCount, 256, 262144)
+                || range.sampleCount !== quality.sourceSampleCount
+                || !numberInRange(quality.measuredSampleRateHz, 50, 8000)
+                || !numberInRange(quality.resampledRateHz, 50, 8000)
+                || !integerInRange(quality.resampledSampleCount, 256, 262144)
+                || [256, 512, 1024, 2048, 4096].indexOf(quality.windowSize) < 0
+                || quality.overlapSamples !== quality.windowSize / 2
+                || !integerInRange(quality.windowCount, 0, 128)
+                || expectedTotalPossibleWindowCount < 1
+                || quality.totalPossibleWindowCount !== expectedTotalPossibleWindowCount
+                || !integerInRange(
+                    quality.validWindowCount,
+                    0,
+                    quality.totalPossibleWindowCount
+                )
+                || quality.windowCount > quality.validWindowCount
+                || !ratioInRange(quality.validWindowCoverageRatio, 0)
+                || !approximatelyEqual(
+                    quality.validWindowCoverageRatio,
+                    quality.validWindowCount / quality.totalPossibleWindowCount,
+                    0.002
+                )
+                || !ratioInRange(quality.finiteSampleCoverageRatio, 0)
+                || !ratioInRange(quality.finiteTimeSpanCoverageRatio, 0)
+                || !numberInRange(quality.frequencyResolutionHz, 0.01, 31.25)
+                || !approximatelyEqual(
+                    quality.frequencyResolutionHz,
+                    quality.resampledRateHz / quality.windowSize,
+                    0.002
+                )
+                || !validMechanicalQualityTimeline(quality, range, 0)
+                || !validMechanicalReasonCodes(mechanicalResult.reasonCodes, true)
+                || !Array.isArray(mechanicalResult.axes)
+                || mechanicalResult.axes.length > 3) {
+            return false;
+        }
+        var seenAxes = Object.create(null);
+        return mechanicalResult.axes.every(function(axis) {
+            if (!axis || typeof axis !== "object"
+                    || ["roll", "pitch", "yaw"].indexOf(axis.axis) < 0
+                    || seenAxes[axis.axis]
+                    || ["gyroRAW", "gyroUnfilt", "gyroADC-filtered"].indexOf(axis.source) < 0
+                    || axis.available !== false
+                    || !Array.isArray(axis.peaks)
+                    || axis.peaks.length !== 0
+                    || !integerInRange(axis.totalPossibleWindowCount, 0, 4096)
+                    || !integerInRange(axis.validWindowCount, 0, axis.totalPossibleWindowCount)
+                    || !ratioInRange(axis.validWindowCoverageRatio, 0)
+                    || !ratioInRange(axis.finiteSampleCoverageRatio, 0)
+                    || !ratioInRange(axis.finiteTimeSpanCoverageRatio, 0)
+                    || !integerInRange(axis.windowCount, 0, 128)
+                    || !integerInRange(axis.candidateWindowCount, axis.windowCount, 4096)
+                    || !ratioInRange(axis.windowCoverageRatio, 0)
+                    || (axis.candidateWindowCount > 0 && !approximatelyEqual(
+                        axis.windowCoverageRatio,
+                        axis.windowCount / axis.candidateWindowCount,
+                        0.002
+                    ))
+                    || axis.totalPossibleWindowCount !== expectedTotalPossibleWindowCount
+                    || axis.validWindowCount !== axis.candidateWindowCount
+                    || axis.windowCount !== Math.min(axis.validWindowCount, 128)
+                    || !validMechanicalAxisTimeline(axis, quality, range, 0, false)) {
+                return false;
+            }
+            seenAxes[axis.axis] = true;
+            return true;
+        });
+    }
+
+    function validateMechanicalResult(mechanicalResult, submittedRange) {
+        if (!mechanicalResult || typeof mechanicalResult !== "object") {
+            return { state: "unavailable" };
+        }
+
+        if (!rangesEqual(mechanicalResult.range, submittedRange)) {
+            return { state: "range-mismatch" };
+        }
+
+        var findings = mechanicalResult.findings;
+        if (!Array.isArray(findings)) {
+            return { state: "unavailable" };
+        }
+        for (var findingIndex = 0; findingIndex < findings.length; findingIndex++) {
+            var finding = findings[findingIndex];
+            var findingRange = finding && normalizeTimeRange(finding.timeRangeUs);
+            if (!findingRange) {
+                return { state: "unavailable" };
+            }
+            if (!rangesEqual(findingRange, submittedRange)) {
+                return { state: "range-mismatch" };
+            }
+        }
+
+        var capabilities = mechanicalResult.capabilities;
+        var safeCapabilities = Boolean(
+            capabilities
+            && capabilities.offline === true
+            && capabilities.selectedRangeRequired === true
+            && capabilities.selectedRangeOnly === true
+            && capabilities.rawLogIncluded === false
+            && capabilities.componentDiagnosis === false
+            && capabilities.tuningRecommendations === false
+            && capabilities.settingDirectionAdvice === false
+            && capabilities.directSettingWrites === false
+        );
+        var safeStatus = ["clear", "attention", "insufficient"]
+            .indexOf(mechanicalResult.status) >= 0;
+        var range = mechanicalResult.range;
+        var safeRangeMetadata = range.durationUs
+                === range.endTimeUs - range.startTimeUs
+            && range.durationUs > 0
+            && range.durationUs <= 120000000
+            && (range.sampleCount === null
+                || integerInRange(range.sampleCount, 0, 262144));
+        if (mechanicalResult.schemaVersion !== 1
+                || typeof mechanicalResult.engineVersion !== "string"
+                || !mechanicalResult.engineVersion.trim()
+                || mechanicalResult.engineVersion.length > 64
+                || mechanicalResult.analysisMode !== "deterministic-local"
+                || !safeCapabilities
+                || !safeStatus
+                || !safeRangeMetadata
+                || !validMechanicalReasonCodes(
+                    mechanicalResult.reasonCodes,
+                    mechanicalResult.status === "insufficient"
+                )) {
+            return { state: "unavailable" };
+        }
+
+        var validStatusContract = mechanicalResult.status === "insufficient"
+            ? validInsufficientMechanicalResult(mechanicalResult)
+            : validAcceptedMechanicalResult(mechanicalResult);
+        if (!validStatusContract) {
+            return { state: "unavailable" };
+        }
+
+        return {
+            state: "valid",
+            result: mechanicalResult
+        };
+    }
+
+    function mechanicalNeedsInspection(mechanicalState) {
+        return Boolean(
+            mechanicalState
+            && mechanicalState.state === "valid"
+            && mechanicalState.result
+            && mechanicalState.result.status === "attention"
+        );
+    }
+
+    function mechanicalAllowsGovernor(mechanicalState) {
+        return Boolean(
+            mechanicalState
+            && mechanicalState.state === "valid"
+            && mechanicalState.result
+            && mechanicalState.result.status === "clear"
+        );
+    }
+
+    function mechanicalEvidenceIsLimited(mechanicalState) {
+        return !mechanicalState
+            || mechanicalState.state !== "valid"
+            || !mechanicalState.result
+            || mechanicalState.result.status === "insufficient";
+    }
+
+    function applyMechanicalRecommendationBoundary(validation, mechanicalState) {
+        if (validation && validation.state === "valid"
+                && !mechanicalAllowsGovernor(mechanicalState)) {
+            return {
+                state: "mechanical-withhold",
+                mechanicalStatus: mechanicalState
+                    && mechanicalState.result && mechanicalState.result.status
+            };
+        }
+        return validation;
+    }
+
+    function mechanicalStat(label, value) {
+        var item = element("dl", "tune-advisor-mechanical-stat");
+        append(item, element("dt", null, label));
+        append(item, element("dd", null, value));
+        return item;
+    }
+
+    function formatPower(value) {
+        if (!isFiniteNumber(value)) {
+            return "—";
+        }
+        var magnitude = Math.abs(value);
+        if (magnitude > 0 && magnitude < 0.01) {
+            return value.toExponential(2);
+        }
+        return formatNumber(value, 3);
+    }
+
+    function safeAxisLabel(axis) {
+        var normalized = String(axis || "").trim().toLowerCase();
+        if (normalized === "roll" || normalized === "x") {
+            return "Roll";
+        }
+        if (normalized === "pitch" || normalized === "y") {
+            return "Pitch";
+        }
+        if (normalized === "yaw" || normalized === "z") {
+            return "Yaw";
+        }
+        return "Gyro axis";
+    }
+
+    function safeGyroSource(source) {
+        var normalized = String(source || "").trim().toLowerCase();
+        if (normalized === "gyroadc-filtered") {
+            return "Filtered gyro fallback";
+        }
+        if (normalized === "gyroadc"
+                || normalized.indexOf("raw") >= 0
+                || normalized.indexOf("unfiltered") >= 0) {
+            return "Raw gyro";
+        }
+        return "Gyro evidence";
+    }
+
+    function harmonicReference(match) {
+        if (!match || typeof match !== "object") {
+            return "";
+        }
+
+        var referenceName = String(
+            match.reference || match.source || match.rotor || match.kind || ""
+        ).toLowerCase();
+        var label = referenceName.indexOf("tail") >= 0
+            ? "tail-rotor"
+            : referenceName.indexOf("main") >= 0 || referenceName.indexOf("head") >= 0
+                ? "main-rotor"
+                : "logged RPM";
+        var harmonic = match.harmonic;
+        if (!isFiniteNumber(harmonic)) {
+            harmonic = match.order;
+        }
+        var order = isFiniteNumber(harmonic) && harmonic > 0
+            ? " " + formatNumber(harmonic, 1) + "×"
+            : "";
+        return "Near the " + label + order
+            + " reference (correlation only; not a source diagnosis).";
+    }
+
+    function renderSpectrumPeak(peak) {
+        var item = element("li", "tune-advisor-spectrum-peak");
+        append(item, element(
+            "strong",
+            "tune-advisor-spectrum-frequency",
+            isFiniteNumber(peak && peak.frequencyHz)
+                ? formatNumber(peak.frequencyHz, 1) + " Hz"
+                : "Frequency unavailable"
+        ));
+
+        var details = [];
+        if (isFiniteNumber(peak && peak.bandRmsDps)) {
+            details.push(formatNumber(peak.bandRmsDps, 2) + " °/s band RMS");
+        }
+        if (isFiniteNumber(peak && peak.prominenceDb)) {
+            details.push(formatNumber(peak.prominenceDb, 1) + " dB prominence");
+        }
+        if (isFiniteNumber(peak && peak.relativePowerDb)) {
+            details.push(formatNumber(peak.relativePowerDb, 1) + " dB relative power");
+        }
+        if (isFiniteNumber(peak && peak.bandwidthHz)) {
+            details.push(formatNumber(peak.bandwidthHz, 1) + " Hz bandwidth");
+        }
+        if (isFiniteNumber(peak && peak.psdDps2PerHz)) {
+            details.push(formatPower(peak.psdDps2PerHz) + " (°/s)²/Hz PSD");
+        }
+        append(item, element(
+            "span",
+            "tune-advisor-spectrum-detail",
+            details.length ? details.join(" · ") : "Qualified spectral peak"
+        ));
+
+        var reference = harmonicReference(peak && peak.harmonicMatch);
+        if (reference) {
+            append(item, element("span", "tune-advisor-spectrum-reference", reference));
+        }
+        return item;
+    }
+
+    function renderSpectrumAxis(axis) {
+        var card = element("article", "tune-advisor-spectrum-axis");
+        append(card, element("h6", null, safeAxisLabel(axis && axis.axis)));
+
+        var details = [safeGyroSource(axis && axis.source)];
+        if (isFiniteNumber(axis && axis.rmsDps)) {
+            details.push("RMS " + formatNumber(axis.rmsDps, 1) + " °/s");
+        }
+        if (isFiniteNumber(axis && axis.medianNoisePsdDps2PerHz)) {
+            details.push("median noise " + formatPower(axis.medianNoisePsdDps2PerHz) + " (°/s)²/Hz");
+        }
+        append(card, element(
+            "p",
+            "tune-advisor-spectrum-axis-summary",
+            details.join(" · ")
+        ));
+
+        var peaks = Array.isArray(axis && axis.peaks)
+            ? axis.peaks.filter(function(peak) {
+                return peak && isFiniteNumber(peak.frequencyHz) && peak.frequencyHz >= 0;
+            }).slice(0, 5)
+            : [];
+        if (!peaks.length) {
+            append(card, element(
+                "p",
+                "tune-advisor-spectrum-axis-summary",
+                "No qualified dominant peaks on this axis."
+            ));
+            return card;
+        }
+
+        var list = append(card, element("ul", "tune-advisor-spectrum-peaks"));
+        peaks.forEach(function(peak) {
+            append(list, renderSpectrumPeak(peak));
+        });
+        return card;
+    }
+
+    function mechanicalActions(status) {
+        if (status === "attention") {
+            return [
+                "Land and inspect blades, tracking, balance, shafts, bearings, drivetrain, fasteners, airframe, wiring, and gyro mounting before tuning.",
+                "Correct any mechanical or mounting issue first; do not chase this spectrum with PID or Governor changes.",
+                "After inspection, repeat the same operating condition in a new In/Out selection and compare the peak frequency and strength."
+            ];
+        }
+        if (status === "clear") {
+            return [
+                "Continue normal preflight and mechanical inspections; a clear selected range is not proof that every component is healthy.",
+                "If an unexplained vibration remains, capture another clean range at the same operating condition and compare before changing tuning."
+            ];
+        }
+        return [
+            "Choose a longer, clean, steady-speed In/Out range with gyro data, then analyze again.",
+            "Do not infer a mechanical fault or change PID/Governor settings from insufficient spectrum evidence."
+        ];
+    }
+
+    function renderMechanicalUnavailable() {
+        clearMechanicalPresentation();
+        mechanicalStatus
+            .addClass("status-insufficient")
+            .text("Analysis unavailable");
+        append(mechanicalContainer[0], element(
+            "p",
+            "tune-advisor-mechanical-summary",
+            "Mechanical analysis is unavailable for this selected range. Governor and control measurements remain separate; no mechanical conclusion or tuning advice is shown."
+        ));
+        mechanicalSection.removeAttr("hidden");
+    }
+
+    function renderMechanicalResult(mechanicalState) {
+        if (!mechanicalState || mechanicalState.state !== "valid") {
+            renderMechanicalUnavailable();
+            return;
+        }
+
+        clearMechanicalPresentation();
+        var mechanicalResult = mechanicalState.result;
+        var status = mechanicalResult.status;
+        var belowAttentionGate = Array.isArray(mechanicalResult.reasonCodes)
+            && mechanicalResult.reasonCodes.indexOf(
+                "PERSISTENT_NARROWBAND_ENERGY_BELOW_ATTENTION_THRESHOLD"
+            ) >= 0;
+        var statusLabel = status === "attention"
+            ? "Inspect mechanics"
+            : status === "clear"
+                ? (belowAttentionGate ? "Below attention gate" : "No dominant peak")
+                : "Insufficient evidence";
+        mechanicalStatus.addClass("status-" + status).text(statusLabel);
+
+        var axes = mechanicalResult.axes;
+        var peakCount = axes.reduce(function(total, axis) {
+            return total + (Array.isArray(axis && axis.peaks) ? axis.peaks.length : 0);
+        }, 0);
+        var summary = status === "attention"
+            ? "The exact selected range contains " + peakCount
+                + " qualified spectral " + (peakCount === 1 ? "peak" : "peaks")
+                + " across " + axes.length + " gyro " + (axes.length === 1 ? "axis" : "axes")
+                + ". Treat these as clues for a mechanics-first inspection."
+            : status === "clear"
+                ? (belowAttentionGate
+                    ? "Persistent frequency evidence was measured, but it remained below RotorLens's experimental attention-amplitude gate. Use it as a comparison baseline; this is not a mechanical-health certification."
+                    : "No qualified dominant vibration peak was flagged in the exact selected range. This is not a mechanical-health certification.")
+                : "The exact selected range did not contain enough suitable gyro evidence for a reliable spectrum, so no mechanical conclusion was produced.";
+        append(mechanicalContainer[0], element("p", "tune-advisor-mechanical-summary", summary));
+
+        var quality = mechanicalResult.quality;
+        var stats = append(mechanicalContainer[0], element("div", "tune-advisor-mechanical-quality"));
+        append(stats, mechanicalStat(
+            "Resampled rate",
+            isFiniteNumber(quality.resampledRateHz)
+                ? formatNumber(quality.resampledRateHz, 1) + " Hz"
+                : "—"
+        ));
+        append(stats, mechanicalStat(
+            "FFT windows",
+            isFiniteNumber(quality.windowCount) ? formatNumber(quality.windowCount, 0) : "—"
+        ));
+        append(stats, mechanicalStat(
+            "Resolution",
+            isFiniteNumber(quality.frequencyResolutionHz)
+                ? formatNumber(quality.frequencyResolutionHz, 2) + " Hz"
+                : "—"
+        ));
+        append(stats, mechanicalStat(
+            "Experimental attention gate",
+            isFiniteNumber(quality.attentionBandRmsThresholdDps)
+                ? formatNumber(quality.attentionBandRmsThresholdDps, 1) + " °/s band RMS"
+                : "—"
+        ));
+
+        if (axes.length) {
+            var spectrumGrid = append(mechanicalContainer[0], element("div", "tune-advisor-spectrum-grid"));
+            axes.slice(0, 3).forEach(function(axis) {
+                append(spectrumGrid, renderSpectrumAxis(axis));
+            });
+        }
+
+        var actionBox = append(mechanicalContainer[0], element("div", "tune-advisor-mechanical-actions"));
+        append(actionBox, element("strong", null, "Mechanics-first next steps"));
+        var actionList = append(actionBox, element("ol"));
+        mechanicalActions(status).forEach(function(action) {
+            append(actionList, element("li", null, action));
+        });
+        mechanicalSection.removeAttr("hidden");
+    }
+
     function normalizeTimeRange(value) {
         var start;
         var end;
@@ -919,7 +1787,11 @@
             return;
         }
 
-        if (validation && validation.state === "valid") {
+        if (validation && validation.state === "mechanical-withhold") {
+            confirmationNotice = validation.mechanicalStatus === "attention"
+                ? "Mechanical spectrum evidence requires inspection first. Governor F advice is hidden until the mechanics are checked and a new clean In/Out range is analyzed."
+                : "Governor F advice is hidden because this exact range did not produce a rigorously verified clear mechanical result.";
+        } else if (validation && validation.state === "valid") {
             confirmationNotice = "User-entered prerequisites are separate from measured log evidence. Both gates passed for the single experimental next-test proposal below; no setting was written.";
         } else if (gate && gate.status === "withheld"
                 && allConfirmationsChecked()
@@ -1111,7 +1983,7 @@
 
         var validation = priorValidation
             || validateRecommendation(evidencePackage, evidenceById, submittedRange);
-        if (validation.state === "none") {
+        if (validation.state === "none" || validation.state === "mechanical-withhold") {
             return validation;
         }
 
@@ -1290,7 +2162,7 @@
             });
     }
 
-    function overallState(evidencePackage, recommendationValidation) {
+    function overallState(evidencePackage, recommendationValidation, mechanicalState) {
         var findings = visibleFindings(evidencePackage, recommendationValidation);
         var qualityStatus = evidencePackage.quality && evidencePackage.quality.status;
         var grade = typeof evidencePackage.grade === "string"
@@ -1306,17 +2178,41 @@
         if (grade === "blocked" || grade === "stop" || qualityStatus === "blocked" || findings.some(function(finding) { return finding.severity === "stop"; })) {
             return { className: "status-blocked", label: "Evidence blocked · Stop / inspect" };
         }
+        if (mechanicalNeedsInspection(mechanicalState)) {
+            return {
+                className: "status-caution",
+                label: "Mechanical inspection advised"
+            };
+        }
+        if (mechanicalEvidenceIsLimited(mechanicalState)) {
+            return {
+                className: "status-caution",
+                label: "Mechanical evidence limited"
+            };
+        }
         if (grade === "limited" || grade === "caution" || qualityStatus === "caution" || findings.some(function(finding) { return finding.severity === "caution"; })) {
             return { className: "status-caution", label: "Evidence limited" };
         }
         return { className: "status-pass", label: "Evidence supported" };
     }
 
-    function renderResults(evidencePackage, submittedRange) {
+    function renderResults(evidencePackage, submittedRange, mechanicalState) {
         if (!rangesEqual(evidencePackage && evidencePackage.range, submittedRange)) {
             currentPackage = null;
             currentPackageRange = null;
+            currentMechanicalState = null;
             showError("Tune Advisor rejected results that were not bound to the exact submitted In/Out range. Analyze the selection again; no result or confirmation was accepted.");
+            return false;
+        }
+
+        var mechanicalValidation = mechanicalState && mechanicalState.state === "valid"
+            ? validateMechanicalResult(mechanicalState.result, submittedRange)
+            : { state: "unavailable" };
+        if (mechanicalValidation.state === "range-mismatch") {
+            currentPackage = null;
+            currentPackageRange = null;
+            currentMechanicalState = null;
+            showError("Tune Advisor rejected mechanical evidence that was not bound to the exact submitted In/Out range. No result was accepted.");
             return false;
         }
 
@@ -1331,10 +2227,9 @@
                 evidenceById[evidence.id] = evidence;
             }
         });
-        var recommendationValidation = validateRecommendation(
-            evidencePackage,
-            evidenceById,
-            submittedRange
+        var recommendationValidation = applyMechanicalRecommendationBoundary(
+            validateRecommendation(evidencePackage, evidenceById, submittedRange),
+            mechanicalValidation
         );
 
         var sourceById = {};
@@ -1359,7 +2254,11 @@
             ));
         }
 
-        var status = overallState(evidencePackage, recommendationValidation);
+        var status = overallState(
+            evidencePackage,
+            recommendationValidation,
+            mechanicalValidation
+        );
         overallStatus
             .removeClass("status-pass status-caution status-blocked")
             .addClass(status.className)
@@ -1373,6 +2272,7 @@
             recommendationValidation
         );
         applyRecommendationNotice(gateState, recommendationValidation);
+        renderMechanicalResult(mechanicalValidation);
         renderMeasurements(evidencePackage);
         errorBox.attr("hidden", true).empty();
         results.removeAttr("hidden");
@@ -1398,6 +2298,7 @@
         cancelActiveJob();
         currentPackage = null;
         currentPackageRange = null;
+        currentMechanicalState = null;
         confirmationBusy = false;
         errorBox.attr("hidden", true).empty();
         results.attr("hidden", true);
@@ -1405,6 +2306,7 @@
         withheldReasonsContainer.empty();
         recommendationSection.attr("hidden", true);
         recommendationContainer.empty();
+        clearMechanicalPresentation();
         progressContainer.removeAttr("hidden");
         renderPendingLogSummary();
         setProgress(message || "User-entered prerequisites changed. Analyze the selected range again.", 0);
@@ -1437,6 +2339,7 @@
         if (!selectedRange) {
             currentPackage = null;
             currentPackageRange = null;
+            currentMechanicalState = null;
             showError("Set both graph In and Out markers, with In before Out, then run Tune Advisor again.");
             return;
         }
@@ -1444,7 +2347,7 @@
                 && currentPackage
                 && rangesEqual(currentPackageRange, selectedRange)
                 && rangesEqual(currentPackage.range, currentPackageRange)) {
-            renderResults(currentPackage, currentPackageRange);
+            renderResults(currentPackage, currentPackageRange, currentMechanicalState);
             return;
         }
 
@@ -1457,6 +2360,7 @@
         cancelActiveJob();
         currentPackage = null;
         currentPackageRange = null;
+        currentMechanicalState = null;
         var job = {
             cancelled: false,
             generation: generation,
@@ -1473,6 +2377,7 @@
         withheldReasonsContainer.empty();
         recommendationSection.attr("hidden", true);
         recommendationContainer.empty();
+        clearMechanicalPresentation();
         progressContainer.removeAttr("hidden");
         rerunButton.prop("disabled", true);
         modal.attr("aria-busy", "true");
@@ -1481,31 +2386,105 @@
         updateConfirmationUi();
         setProgress("Preparing on-device analysis", 0);
 
+        var isJobCancelled = function() {
+            return job.cancelled
+                || job.generation !== generation
+                || job.log !== currentLog
+                || !rangesEqual(readSelectedRange(), job.range);
+        };
+
         Promise.resolve().then(function() {
+            var mechanicalEngine = window.RotorLensMechanicalAnalysis;
+            if (!mechanicalEngine || typeof mechanicalEngine.analyzeFlightLog !== "function") {
+                return { state: "unavailable" };
+            }
+
+            var mechanicalOptions = {
+                timeRangeUs: copyRange(job.range),
+                isCancelled: isJobCancelled,
+                onProgress: function(progress) {
+                    if (job.cancelled || activeJob !== job) {
+                        return;
+                    }
+                    var label = MECHANICAL_PHASE_LABELS[progress && progress.phase]
+                        || "Measuring selected-range vibration spectrum";
+                    setProgress(label, mechanicalProgressPercent(progress));
+                }
+            };
+            return Promise.resolve().then(function() {
+                return mechanicalEngine.analyzeFlightLog(job.log, mechanicalOptions);
+            }).then(function(mechanicalResult) {
+                var validation = validateMechanicalResult(mechanicalResult, job.range);
+                if (validation.state === "range-mismatch") {
+                    var mismatchError = new Error(
+                        "Mechanical evidence was returned for a different In/Out range. No result was accepted."
+                    );
+                    mismatchError.code = "MECHANICAL_RANGE_MISMATCH";
+                    throw mismatchError;
+                }
+                return validation;
+            }).catch(function(error) {
+                if (error && error.code === "MECHANICAL_RANGE_MISMATCH") {
+                    throw error;
+                }
+                if (isJobCancelled()) {
+                    var cancelledError = new Error("Analysis cancelled");
+                    cancelledError.code = "ANALYSIS_CANCELLED";
+                    throw cancelledError;
+                }
+                return { state: "unavailable" };
+            });
+        }).then(function(mechanicalState) {
+            if (isJobCancelled() || activeJob !== job) {
+                var cancelledError = new Error("Analysis cancelled");
+                cancelledError.code = "ANALYSIS_CANCELLED";
+                throw cancelledError;
+            }
+
+            setProgress("Checking control and governor evidence", 30);
             var engineOptions = {
-                timeRangeUs: job.range,
-                isCancelled: function() {
-                    return job.cancelled
-                        || job.generation !== generation
-                        || job.log !== currentLog
-                        || !rangesEqual(readSelectedRange(), job.range);
-                },
+                timeRangeUs: copyRange(job.range),
+                isCancelled: isJobCancelled,
                 onProgress: function(progress) {
                     if (job.cancelled || activeJob !== job) {
                         return;
                     }
                     var label = PHASE_LABELS[progress && progress.phase] || "Analyzing log";
-                    setProgress(label, progressPercent(progress));
+                    setProgress(label, 30 + (progressPercent(progress) * 0.7));
                 }
             };
+            if (mechanicalState.state === "valid") {
+                var mechanicalResult = mechanicalState.result;
+                engineOptions.mechanicalGate = {
+                    status: mechanicalResult.status,
+                    range: copyRange(mechanicalResult.range),
+                    reasonCodes: (Array.isArray(mechanicalResult.reasonCodes)
+                        ? mechanicalResult.reasonCodes
+                        : []).filter(function(code) {
+                        return typeof code === "string"
+                            && /^[A-Z][A-Z0-9_]{0,63}$/.test(code);
+                    }).slice(0, 16)
+                };
+            } else {
+                engineOptions.mechanicalGate = {
+                    status: "unavailable",
+                    range: copyRange(job.range),
+                    reasonCodes: ["MECHANICAL_ANALYSIS_UNAVAILABLE"]
+                };
+            }
             if (job.confirmations) {
                 engineOptions.confirmations = job.confirmations;
             }
             if (job.userInputs) {
                 engineOptions.userInputs = job.userInputs;
             }
-            return engine.analyzeFlightLog(job.log, engineOptions);
-        }).then(function(evidencePackage) {
+            return Promise.resolve(engine.analyzeFlightLog(job.log, engineOptions)).then(function(evidencePackage) {
+                return {
+                    evidencePackage: evidencePackage,
+                    mechanicalState: mechanicalState
+                };
+            });
+        }).then(function(analysisResult) {
             if (job.cancelled || activeJob !== job || job.generation !== generation || job.log !== currentLog) {
                 return;
             }
@@ -1515,15 +2494,13 @@
                 return;
             }
             activeJob = null;
-            if (!evidencePackage || typeof evidencePackage !== "object") {
-                throw new Error("Tune Advisor returned an invalid evidence package.");
+            if (!analysisResult || !analysisResult.evidencePackage) {
+                throw new Error("Tune Advisor returned an invalid analysis result.");
             }
-            if (!rangesEqual(evidencePackage.range, job.range)) {
-                throw new Error("Tune Advisor returned results for a different In/Out range. No result or confirmation was accepted.");
-            }
-            currentPackage = evidencePackage;
+            currentPackage = analysisResult.evidencePackage;
             currentPackageRange = copyRange(job.range);
-            renderResults(evidencePackage, currentPackageRange);
+            currentMechanicalState = analysisResult.mechanicalState;
+            renderResults(currentPackage, currentPackageRange, currentMechanicalState);
         }).catch(function(error) {
             if (job.cancelled || job.generation !== generation || job.log !== currentLog) {
                 return;
@@ -1534,6 +2511,13 @@
             if (error && error.code === "ANALYSIS_CANCELLED"
                     && !rangesEqual(readSelectedRange(), job.range)) {
                 showError("The graph In/Out range changed. Run Tune Advisor again for the new selection.");
+                return;
+            }
+            if (error && error.code === "MECHANICAL_RANGE_MISMATCH") {
+                currentPackage = null;
+                currentPackageRange = null;
+                currentMechanicalState = null;
+                showError("Tune Advisor rejected mechanical evidence that was not bound to the exact submitted In/Out range. No result or confirmation was accepted.");
                 return;
             }
             showError(error && error.message
@@ -1561,6 +2545,7 @@
         currentContext = context || {};
         currentPackage = null;
         currentPackageRange = null;
+        currentMechanicalState = null;
         resetConfirmationSession(currentLog
             ? "A new log is active. User confirmations and Governor Maximum Throttle were cleared; verify this aircraft profile again."
             : "");
@@ -1624,6 +2609,7 @@
             cancelActiveJob();
             currentPackage = null;
             currentPackageRange = null;
+            currentMechanicalState = null;
             resetConfirmationsForRange();
             resetPresentation();
             if (modal.hasClass("in") && readSelectedRange()) {
@@ -1656,7 +2642,9 @@
             verifiedRotorflightBuild: verifiedRotorflightBuild,
             recommendationMetadataMatches: recommendationMetadataMatches,
             exactCanonicalConfirmationIds: exactCanonicalConfirmationIds,
-            hasCuratedWithheldReason: hasCuratedWithheldReason
+            hasCuratedWithheldReason: hasCuratedWithheldReason,
+            validateMechanicalResult: validateMechanicalResult,
+            applyMechanicalRecommendationBoundary: applyMechanicalRecommendationBoundary
         });
     }
     window.RotorLensTuneAdvisorUI = advisorApi;

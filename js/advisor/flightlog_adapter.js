@@ -112,6 +112,67 @@
         };
     }
 
+    function validateMechanicalGate(options, selectedRange) {
+        if (!options || !hasOwn(options, "mechanicalGate")
+                || options.mechanicalGate === undefined) {
+            return null;
+        }
+
+        var gate = options.mechanicalGate;
+        var allowedStatuses = ["clear", "attention", "insufficient", "unavailable"];
+        var gateRange = gate && gate.range;
+        if (!gate || typeof gate !== "object" || Array.isArray(gate)
+                || allowedStatuses.indexOf(gate.status) === -1
+                || !gateRange || typeof gateRange !== "object"
+                || Array.isArray(gateRange)
+                || !Number.isFinite(gateRange.startTimeUs)
+                || !Number.isFinite(gateRange.endTimeUs)
+                || gateRange.startTimeUs >= gateRange.endTimeUs) {
+            throw rangeError(
+                "MECHANICAL_GATE_INVALID",
+                "Mechanical analysis returned an invalid selected-range safety gate"
+            );
+        }
+
+        if (gateRange.startTimeUs !== selectedRange.startTimeUs
+                || gateRange.endTimeUs !== selectedRange.endTimeUs) {
+            throw rangeError(
+                "MECHANICAL_GATE_RANGE_MISMATCH",
+                "Mechanical analysis returned a safety gate for a different In/Out range"
+            );
+        }
+
+        var reasonCodes = [];
+        if (gate.reasonCodes !== undefined) {
+            var seenReasonCodes = Object.create(null);
+            if (!Array.isArray(gate.reasonCodes) || gate.reasonCodes.length > 16
+                    || !gate.reasonCodes.every(function(code) {
+                        if (typeof code !== "string"
+                                || !/^[A-Z][A-Z0-9_]{0,79}$/.test(code)
+                                || seenReasonCodes[code]) {
+                            return false;
+                        }
+                        seenReasonCodes[code] = true;
+                        return true;
+                    })) {
+                throw rangeError(
+                    "MECHANICAL_GATE_INVALID",
+                    "Mechanical analysis returned invalid safety-gate reason codes"
+                );
+            }
+            reasonCodes = gate.reasonCodes.slice();
+        }
+
+        return Object.freeze({
+            status: gate.status,
+            range: Object.freeze({
+                startTimeUs: gateRange.startTimeUs,
+                endTimeUs: gateRange.endTimeUs
+            }),
+            reasonCodes: Object.freeze(reasonCodes)
+        });
+    }
+
     function reportProgress(options, phase, completed, total) {
         if (!options || typeof options.onProgress !== "function") {
             return;
@@ -453,6 +514,7 @@
         }
 
         var selectedRange = requireSelectedRange(flightLog, options);
+        var mechanicalGate = validateMechanicalGate(options, selectedRange);
         var minTimeUs = selectedRange.startTimeUs;
         var maxTimeUs = selectedRange.endTimeUs;
         var durationUs = Math.max(0, maxTimeUs - minTimeUs);
@@ -577,6 +639,7 @@
             governorRecordsCapped: false,
             governorRecordsFullRate: true,
             governorConfiguration: governorConfiguration,
+            mechanicalGate: mechanicalGate,
             safetyEventCodes: [],
             coverage: {
                 setpointAxes: indexes.setpoints.map(function(index) { return index !== null; }),

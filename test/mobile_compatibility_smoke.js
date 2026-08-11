@@ -169,7 +169,15 @@ function assertTuneAdvisorSelectedRangeContract() {
     assert.ok(rulesSource.includes("118e912"));
     assert.ok(uiSource.includes("function evidenceRangeWithinSelection("));
     assert.ok(uiSource.includes("timeRangeUs[0] < timeRangeUs[1]"));
-    assert.ok(uiSource.includes("function renderResults(evidencePackage, submittedRange)"));
+    assert.ok(uiSource.includes("function renderResults(evidencePackage, submittedRange, mechanicalState)"));
+    assert.ok(uiSource.includes("function validateMechanicalResult(mechanicalResult, submittedRange)"));
+    assert.ok(uiSource.includes("MECHANICAL_RANGE_MISMATCH"));
+    assert.ok(uiSource.includes("engineOptions.mechanicalGate"));
+    assert.ok(
+        uiSource.indexOf("mechanicalEngine.analyzeFlightLog")
+            < uiSource.indexOf("Promise.resolve(engine.analyzeFlightLog"),
+        "Mechanical evidence must be completed before the gated Governor analysis"
+    );
     assert.ok(htmlSource.includes('data-user-input="governorMaxThrottlePct"'));
     assert.ok(htmlSource.includes('min="10" max="100" step="1" inputmode="numeric"'));
     assert.ok(uiSource.includes("Number.isInteger(value)"));
@@ -184,16 +192,20 @@ function assertTuneAdvisorSelectedRangeContract() {
         assert.ok(htmlSource.includes('data-confirmation="' + confirmationId + '"'));
     });
     [
-        "css/rotorlens_advisor.css?v=116",
-        "js/advisor/evidence_contract.js?v=116",
-        "js/advisor/deterministic_metrics.js?v=116",
-        "js/advisor/rules.js?v=116",
-        "js/advisor/flightlog_adapter.js?v=116",
-        "js/advisor/advisor_ui.js?v=116"
+        "css/rotorlens_advisor.css?v=117",
+        "js/advisor/evidence_contract.js?v=117",
+        "js/advisor/deterministic_metrics.js?v=117",
+        "js/advisor/rules.js?v=117",
+        "js/advisor/flightlog_adapter.js?v=117",
+        "js/advisor/mechanical_analysis.js?v=117",
+        "js/advisor/advisor_ui.js?v=117"
     ].forEach(function(assetUrl) {
         assert.ok(htmlSource.includes(assetUrl), "Missing versioned Advisor asset " + assetUrl);
     });
-    assert.ok(platformSource.includes('androidAssetVersion = "116"'));
+    assert.ok(platformSource.includes('androidAssetVersion = "117"'));
+    assert.ok(htmlSource.includes("Spectrum patterns are inspection clues, not a component diagnosis."));
+    assert.ok(htmlSource.includes("does not recommend PID or Governor changes"));
+    assert.ok(source("css/rotorlens_advisor.css").includes(".tune-advisor-spectrum-grid"));
 }
 
 function assertTuneAdvisorResultValidationRuntime() {
@@ -221,6 +233,8 @@ function assertTuneAdvisorResultValidationRuntime() {
         "ANALYSIS_CANCELLED",
         "ANALYSIS_RANGE_INVALID",
         "ANALYSIS_RANGE_REQUIRED",
+        "MECHANICAL_GATE_INVALID",
+        "MECHANICAL_GATE_RANGE_MISMATCH",
         "CONSISTENT_DROOP",
         "CONSISTENT_OVERSHOOT"
     ]);
@@ -358,6 +372,363 @@ function assertTuneAdvisorResultValidationRuntime() {
         "A fully validated recommendation may retain its positive next-test finding"
     );
 
+    const selectedRange = { startTimeUs: 1000000, endTimeUs: 7000000 };
+    const safeCapabilities = {
+        offline: true,
+        selectedRangeRequired: true,
+        selectedRangeOnly: true,
+        rawLogIncluded: false,
+        componentDiagnosis: false,
+        tuningRecommendations: false,
+        settingDirectionAdvice: false,
+        directSettingWrites: false
+    };
+    function acceptedAxis(axis, source, peaks) {
+        return {
+            axis,
+            source,
+            amplitudeKind: source === "gyroADC-filtered"
+                ? "filtered-gyro-output" : "unfiltered-gyro-output",
+            available: true,
+            sampleCount: 5900,
+            rmsDps: 12,
+            broadbandPowerDps2: 144,
+            broadbandRmsDps: 12,
+            medianNoisePsdDps2PerHz: 0.25,
+            windowCount: 20,
+            candidateWindowCount: 20,
+            windowCoverageRatio: 1,
+            totalPossibleWindowCount: 22,
+            validWindowCount: 20,
+            validWindowCoverageRatio: 0.909,
+            finiteSampleCoverageRatio: 0.983,
+            finiteTimeSpanCoverageRatio: 1,
+            firstFiniteSampleTimeUs: selectedRange.startTimeUs,
+            lastFiniteSampleTimeUs: selectedRange.endTimeUs - 1000,
+            leadingFiniteGapUs: 0,
+            trailingFiniteGapUs: 1000,
+            peaks: peaks || []
+        };
+    }
+    function acceptedMechanical(status, axes) {
+        return {
+            schemaVersion: 1,
+            engineVersion: "0.1.0",
+            analysisMode: "deterministic-local",
+            capabilities: safeCapabilities,
+            range: {
+                startTimeUs: selectedRange.startTimeUs,
+                endTimeUs: selectedRange.endTimeUs,
+                durationUs: 6000000,
+                sampleCount: 6000
+            },
+            status,
+            attention: status === "attention",
+            available: true,
+            reasonCodes: status === "attention"
+                ? ["PERSISTENT_NARROWBAND_ENERGY"] : [],
+            quality: {
+                status: "accepted",
+                sourceSampleCount: 6000,
+                duplicateTimestampCount: 0,
+                measuredSampleRateHz: 1000,
+                resampledRateHz: 1000,
+                resampledSampleCount: 6000,
+                firstSelectedSampleTimeUs: selectedRange.startTimeUs,
+                lastSelectedSampleTimeUs: selectedRange.endTimeUs,
+                leadingSelectedGapUs: 0,
+                trailingSelectedGapUs: 0,
+                selectedTimestampSpanCoverageRatio: 1,
+                resampledStartTimeUs: selectedRange.startTimeUs,
+                resampledEndTimeUs: selectedRange.endTimeUs - 1000,
+                resampledTimeSpanUs: 5999000,
+                resampledRangeCoverageRatio: 1,
+                medianIntervalUs: 1000,
+                p95IntervalUs: 1000,
+                interpolationGapLimitUs: 4000,
+                windowSize: 512,
+                overlapSamples: 256,
+                windowCount: 20,
+                totalPossibleWindowCount: 22,
+                validWindowCount: 20,
+                validWindowCoverageRatio: 0.909,
+                finiteSampleCoverageRatio: 0.983,
+                finiteTimeSpanCoverageRatio: 1,
+                minimumCoverageRatio: 0.75,
+                frequencyResolutionHz: 1.9531,
+                maximumAnalyzedFrequencyHz: 450,
+                maximumWelchWindowsPerAxis: 128,
+                attentionBandRmsThresholdDps: 8
+            },
+            axes,
+            findings: [{
+                id: status === "attention"
+                    ? "mechanical-prominent-peak" : "mechanical-clear",
+                severity: status === "attention" ? "caution" : "info",
+                timeRangeUs: [selectedRange.startTimeUs, selectedRange.endTimeUs]
+            }]
+        };
+    }
+    function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    const attentionPeak = {
+        frequencyHz: 82,
+        psdDps2PerHz: 100,
+        localNoisePsdDps2PerHz: 1,
+        relativePowerDb: 20,
+        prominenceDb: 20,
+        // Engine serializes bandwidth to two decimals while resolution keeps
+        // four; this honest one-bin value must survive UI validation.
+        bandwidthHz: 1.95,
+        bandPowerDps2: 100,
+        bandRmsDps: 10,
+        supportingWindowCount: 10,
+        evaluatedWindowCount: 20,
+        persistenceRatio: 0.5,
+        attentionSupportingWindowCount: 5,
+        attentionPersistenceRatio: 0.25,
+        attentionTemporalSpanRatio: 0.6,
+        attentionOccupiedBucketCount: 3,
+        attentionMaximumGapRatio: 0.2,
+        attentionEligible: true,
+        harmonicMatch: null
+    };
+    const validClear = acceptedMechanical("clear", [
+        acceptedAxis("roll", "gyroRAW"),
+        acceptedAxis("pitch", "gyroUnfilt"),
+        acceptedAxis("yaw", "gyroRAW")
+    ]);
+    const validAttention = acceptedMechanical("attention", [
+        acceptedAxis("roll", "gyroRAW", [attentionPeak]),
+        acceptedAxis("pitch", "gyroUnfilt"),
+        acceptedAxis("yaw", "gyroADC-filtered")
+    ]);
+    const clearValidation = hooks.validateMechanicalResult(validClear, selectedRange);
+    const mechanicalValidation = hooks.validateMechanicalResult(
+        validAttention,
+        selectedRange
+    );
+    assert.strictEqual(clearValidation.state, "valid", "A rigorous clear result must pass");
+    assert.strictEqual(
+        mechanicalValidation.state,
+        "valid",
+        "A rigorous attention result with an eligible peak must pass"
+    );
+    assert.strictEqual(
+        hooks.applyMechanicalRecommendationBoundary({ state: "valid" }, clearValidation).state,
+        "valid",
+        "Only a rigorously validated clear result may preserve Governor direction"
+    );
+    assert.strictEqual(
+        hooks.validateMechanicalResult(Object.assign({}, validAttention, {
+            range: { startTimeUs: 0, endTimeUs: selectedRange.endTimeUs }
+        }), selectedRange).state,
+        "range-mismatch",
+        "Mechanical results from outside the submitted In/Out range must fail closed"
+    );
+    assert.strictEqual(
+        hooks.validateMechanicalResult(Object.assign({}, validAttention, {
+            findings: [{
+                id: "outside-selection",
+                timeRangeUs: [0, selectedRange.endTimeUs]
+            }]
+        }), selectedRange).state,
+        "range-mismatch",
+        "Every mechanical finding must remain bound to the exact submitted range"
+    );
+    assert.strictEqual(
+        hooks.validateMechanicalResult(Object.assign({}, validAttention, {
+            capabilities: Object.assign({}, safeCapabilities, {
+                componentDiagnosis: true
+            })
+        }), selectedRange).state,
+        "unavailable",
+        "A result claiming component-diagnosis capability must not render"
+    );
+    [
+        function(result) { result.engineVersion = ""; },
+        function(result) { result.available = false; },
+        function(result) { result.quality.status = "unverified"; },
+        function(result) { result.quality.attentionBandRmsThresholdDps = 7; },
+        function(result) { result.quality.validWindowCoverageRatio = 0.2; },
+        function(result) { result.axes[1].axis = "roll"; },
+        function(result) {
+            result.axes[2].source = "gyroADC-filtered";
+            result.axes[2].amplitudeKind = "filtered-gyro-output";
+        },
+        function(result) {
+            result.axes[0].peaks = [Object.assign({}, attentionPeak, {
+                attentionEligible: true
+            })];
+        },
+        function(result) {
+            result.axes[0].peaks = [Object.assign({}, attentionPeak, {
+                attentionEligible: true,
+                attentionOccupiedBucketCount: 2
+            })];
+        }
+    ].forEach(function(mutate, index) {
+        const malformedClear = clone(validClear);
+        mutate(malformedClear);
+        assert.strictEqual(
+            hooks.validateMechanicalResult(malformedClear, selectedRange).state,
+            "unavailable",
+            "Malformed clear result " + index + " must become unavailable"
+        );
+    });
+
+    const impossibleLowRateClear = clone(validClear);
+    impossibleLowRateClear.range.sampleCount = 256;
+    Object.assign(impossibleLowRateClear.quality, {
+        sourceSampleCount: 256,
+        measuredSampleRateHz: 50,
+        resampledRateHz: 50,
+        resampledSampleCount: 256,
+        resampledEndTimeUs: selectedRange.startTimeUs + 5100000,
+        resampledTimeSpanUs: 5100000,
+        resampledRangeCoverageRatio: 0.85,
+        windowSize: 256,
+        overlapSamples: 128,
+        windowCount: 3,
+        totalPossibleWindowCount: 3,
+        validWindowCount: 3,
+        validWindowCoverageRatio: 1,
+        frequencyResolutionHz: 0.1953,
+        maximumAnalyzedFrequencyHz: 22.5
+    });
+    impossibleLowRateClear.axes.forEach(function(axis) {
+        Object.assign(axis, {
+            sampleCount: 256,
+            windowCount: 3,
+            candidateWindowCount: 3,
+            windowCoverageRatio: 1,
+            totalPossibleWindowCount: 3,
+            validWindowCount: 3,
+            validWindowCoverageRatio: 1,
+            finiteSampleCoverageRatio: 1,
+            finiteTimeSpanCoverageRatio: 0.85,
+            firstFiniteSampleTimeUs: selectedRange.startTimeUs,
+            lastFiniteSampleTimeUs: selectedRange.startTimeUs + 5100000,
+            leadingFiniteGapUs: 0,
+            trailingFiniteGapUs: 900000,
+            peaks: []
+        });
+    });
+    assert.strictEqual(
+        hooks.validateMechanicalResult(impossibleLowRateClear, selectedRange).state,
+        "unavailable",
+        "A 6 s clear result cannot claim three 256-point windows from 256 samples at 50 Hz"
+    );
+
+    const validInsufficient = {
+        schemaVersion: 1,
+        engineVersion: "0.1.0",
+        analysisMode: "deterministic-local",
+        capabilities: safeCapabilities,
+        range: {
+            startTimeUs: selectedRange.startTimeUs,
+            endTimeUs: selectedRange.endTimeUs,
+            durationUs: 6000000,
+            sampleCount: 6000
+        },
+        status: "insufficient",
+        attention: false,
+        available: false,
+        reasonCodes: ["VALID_WINDOW_COVERAGE_INSUFFICIENT"],
+        quality: {
+            status: "insufficient",
+            sourceSampleCount: 6000,
+            measuredSampleRateHz: 1000,
+            resampledRateHz: 1000,
+            resampledSampleCount: 6000,
+            firstSelectedSampleTimeUs: selectedRange.startTimeUs,
+            lastSelectedSampleTimeUs: selectedRange.endTimeUs,
+            leadingSelectedGapUs: 0,
+            trailingSelectedGapUs: 0,
+            selectedTimestampSpanCoverageRatio: 1,
+            resampledStartTimeUs: selectedRange.startTimeUs,
+            resampledEndTimeUs: selectedRange.endTimeUs - 1000,
+            resampledTimeSpanUs: 5999000,
+            resampledRangeCoverageRatio: 1,
+            windowSize: 512,
+            overlapSamples: 256,
+            windowCount: 11,
+            totalPossibleWindowCount: 22,
+            validWindowCount: 11,
+            validWindowCoverageRatio: 0.5,
+            finiteSampleCoverageRatio: 1,
+            finiteTimeSpanCoverageRatio: 1,
+            minimumCoverageRatio: 0.75,
+            attentionBandRmsThresholdDps: 8,
+            frequencyResolutionHz: 1.9531
+        },
+        axes: [],
+        findings: [{
+            id: "mechanical-analysis-insufficient",
+            severity: "caution",
+            timeRangeUs: [selectedRange.startTimeUs, selectedRange.endTimeUs]
+        }]
+    };
+    const insufficientValidation = hooks.validateMechanicalResult(
+        validInsufficient,
+        selectedRange
+    );
+    assert.strictEqual(insufficientValidation.state, "valid");
+    assert.strictEqual(
+        hooks.applyMechanicalRecommendationBoundary(
+            { state: "valid" },
+            insufficientValidation
+        ).state,
+        "mechanical-withhold",
+        "Insufficient mechanical evidence must defensively hide Governor direction"
+    );
+    assert.strictEqual(
+        hooks.overallState(
+            evidencePackage,
+            { state: "mechanical-withhold" },
+            insufficientValidation
+        ).label,
+        "Mechanical evidence limited",
+        "Insufficient mechanical evidence must not display a supported overall state"
+    );
+    assert.strictEqual(
+        hooks.overallState(
+            evidencePackage,
+            { state: "mechanical-withhold" },
+            { state: "unavailable" }
+        ).className,
+        "status-caution",
+        "Unavailable mechanical evidence must remain visibly limited"
+    );
+    const mechanicalWithhold = hooks.applyMechanicalRecommendationBoundary(
+        { state: "valid" },
+        mechanicalValidation
+    );
+    assert.strictEqual(
+        mechanicalWithhold.state,
+        "mechanical-withhold",
+        "Mechanical attention must defensively hide Governor direction"
+    );
+    const mechanicalOverall = hooks.overallState(
+        evidencePackage,
+        mechanicalWithhold,
+        mechanicalValidation
+    );
+    assert.strictEqual(mechanicalOverall.className, "status-caution");
+    assert.strictEqual(mechanicalOverall.label, "Mechanical inspection advised");
+    const blockedMechanicalOverall = hooks.overallState(
+        Object.assign({}, evidencePackage, { quality: { status: "blocked" } }),
+        mechanicalWithhold,
+        mechanicalValidation
+    );
+    assert.strictEqual(
+        blockedMechanicalOverall.className,
+        "status-blocked",
+        "Mechanical attention must never downgrade a blocked safety result"
+    );
+
     const productionWindow = { jQuery: function() { return {}; } };
     const productionContext = vm.createContext({
         Date,
@@ -376,12 +747,102 @@ function assertTuneAdvisorResultValidationRuntime() {
     );
 }
 
-assertMobileAssetURLs();
-assertNativeOpenSeam();
-assertMobileGraphDropdownSupport();
-assertMobileHeaderDialogLayout();
-assertSpectrumRangeCap();
-assertTuneAdvisorSelectedRangeContract();
-assertTuneAdvisorResultValidationRuntime();
+async function assertRealMechanicalResultsPassUiValidator() {
+    const mechanical = require(path.join(
+        repositoryRoot,
+        "js/advisor/mechanical_analysis.js"
+    ));
+    const advisorWindow = {
+        __ROTORLENS_ADVISOR_TEST__: true,
+        jQuery: function() { return {}; }
+    };
+    const context = vm.createContext({
+        Date,
+        Math,
+        URL,
+        document: {},
+        window: advisorWindow
+    });
+    vm.runInContext(source("js/advisor/advisor_ui.js"), context, {
+        filename: "js/advisor/advisor_ui.js"
+    });
+    const hooks = advisorWindow.RotorLensTuneAdvisorUI.testHooks;
+    const selectedRange = { startTimeUs: 1000000, endTimeUs: 7000000 };
 
-console.log("Mobile compatibility smoke tests passed: hosted assets, ranges, and mobile layouts");
+    function mechanicalSeries(amplitudeDps) {
+        const timeUs = [];
+        const roll = [];
+        const pitch = [];
+        const yaw = [];
+        for (let index = 0; index <= 8000; index++) {
+            const seconds = index / 1000;
+            const value = amplitudeDps * Math.sin(2 * Math.PI * 82 * seconds);
+            timeUs.push(index * 1000);
+            roll.push(value);
+            pitch.push(value);
+            yaw.push(value);
+        }
+        return {
+            timeUs,
+            gyro: { roll, pitch, yaw },
+            gyroSources: {
+                roll: "gyroRAW",
+                pitch: "gyroUnfilt",
+                yaw: "gyroRAW"
+            }
+        };
+    }
+
+    for (const testCase of [
+        { amplitudeDps: 0.2, expectedStatus: "clear" },
+        { amplitudeDps: 30, expectedStatus: "attention" }
+    ]) {
+        const result = await mechanical.analyzeTimeSeries(
+            mechanicalSeries(testCase.amplitudeDps),
+            { timeRangeUs: selectedRange }
+        );
+        assert.strictEqual(result.status, testCase.expectedStatus);
+        assert.strictEqual(
+            hooks.validateMechanicalResult(result, selectedRange).state,
+            "valid",
+            "Real " + testCase.expectedStatus
+                + " engine output must satisfy the strict UI schema"
+        );
+    }
+
+    const realClear = await mechanical.analyzeTimeSeries(
+        mechanicalSeries(0.2),
+        { timeRangeUs: selectedRange }
+    );
+    const impossibleWindows = JSON.parse(JSON.stringify(realClear));
+    impossibleWindows.quality.totalPossibleWindowCount += 1;
+    impossibleWindows.axes.forEach(function(axis) {
+        axis.totalPossibleWindowCount += 1;
+    });
+    assert.strictEqual(
+        hooks.validateMechanicalResult(impossibleWindows, selectedRange).state,
+        "unavailable",
+        "A clear result with an impossible sample/window timeline must be withheld"
+    );
+}
+
+const runPromise = (async function run() {
+    assertMobileAssetURLs();
+    assertNativeOpenSeam();
+    assertMobileGraphDropdownSupport();
+    assertMobileHeaderDialogLayout();
+    assertSpectrumRangeCap();
+    assertTuneAdvisorSelectedRangeContract();
+    assertTuneAdvisorResultValidationRuntime();
+    await assertRealMechanicalResultsPassUiValidator();
+
+    console.log("Mobile compatibility smoke tests passed: hosted assets, ranges, and mobile layouts");
+}());
+
+module.exports = runPromise;
+if (require.main === module) {
+    runPromise.catch(function(error) {
+        console.error(error);
+        process.exitCode = 1;
+    });
+}

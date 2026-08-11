@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="css/header_dialog.css">
     <link rel="stylesheet" href="css/keys_dialog.css">
     <link rel="stylesheet" href="css/user_settings_dialog.css">
-    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=116">
+    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=117">
 
     <script src="js/vendor/modernizr-2.6.2-respond-1.1.0.min.js"></script>
 </head>
@@ -641,7 +641,7 @@
                     <p class="tune-advisor-kicker">ON-DEVICE · DETERMINISTIC</p>
                     <h4 class="modal-title" id="tune-advisor-title">Tune Advisor</h4>
                     <p class="tune-advisor-description" id="tune-advisor-description">
-                        Measures only the graph range between your In and Out markers. It never changes flight-controller settings.
+                        Measures control, governor, and vibration evidence only between your graph In and Out markers. It never changes flight-controller settings.
                     </p>
                 </div>
                 <div class="modal-body">
@@ -731,6 +731,17 @@
                                 <span class="tune-advisor-overall-status label label-default"></span>
                             </div>
                             <div class="tune-advisor-findings"></div>
+                        </section>
+
+                        <section class="tune-advisor-section tune-advisor-mechanical-section" aria-labelledby="tune-advisor-mechanical-heading" hidden>
+                            <div class="tune-advisor-section-heading">
+                                <h5 id="tune-advisor-mechanical-heading">Mechanical / vibration evidence</h5>
+                                <span class="tune-advisor-mechanical-status label label-default"></span>
+                            </div>
+                            <div class="alert alert-info tune-advisor-mechanical-limit" role="note">
+                                Spectrum patterns are inspection clues, not a component diagnosis. This analysis does not recommend PID or Governor changes; inspect the mechanics first.
+                            </div>
+                            <div class="tune-advisor-mechanical"></div>
                         </section>
 
                         <section class="tune-advisor-section tune-advisor-withheld-section" aria-labelledby="tune-advisor-withheld-heading" hidden>
@@ -3646,11 +3657,12 @@
     <script src="js/laptimer.js"></script>
     <script src="js/localization.js"></script>
     <script src="js/default_workspaces.js"></script>
-    <script src="js/advisor/evidence_contract.js?v=116"></script>
-    <script src="js/advisor/deterministic_metrics.js?v=116"></script>
-    <script src="js/advisor/rules.js?v=116"></script>
-    <script src="js/advisor/flightlog_adapter.js?v=116"></script>
-    <script src="js/advisor/advisor_ui.js?v=116"></script>
+    <script src="js/advisor/evidence_contract.js?v=117"></script>
+    <script src="js/advisor/deterministic_metrics.js?v=117"></script>
+    <script src="js/advisor/rules.js?v=117"></script>
+    <script src="js/advisor/flightlog_adapter.js?v=117"></script>
+    <script src="js/advisor/mechanical_analysis.js?v=117"></script>
+    <script src="js/advisor/advisor_ui.js?v=117"></script>
     <script src="js/main.js"></script>
     <script src="index.js"></script>
 

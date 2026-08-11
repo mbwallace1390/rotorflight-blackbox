@@ -242,7 +242,8 @@
 .tune-advisor-results[hidden],
 .tune-advisor-error[hidden],
 .tune-advisor-withheld-section[hidden],
-.tune-advisor-recommendation-section[hidden] {
+.tune-advisor-recommendation-section[hidden],
+.tune-advisor-mechanical-section[hidden] {
     display: none !important;
 }
 
@@ -282,6 +283,172 @@
 
 .tune-advisor-overall-status.status-blocked {
     background-color: #a83b32;
+}
+
+.tune-advisor-mechanical-status {
+    flex: 0 0 auto;
+    letter-spacing: 0.5px;
+    max-width: 100%;
+    text-transform: uppercase;
+}
+
+.tune-advisor-mechanical-status.status-clear {
+    background-color: #377b4b;
+}
+
+.tune-advisor-mechanical-status.status-attention {
+    background-color: #a66b00;
+}
+
+.tune-advisor-mechanical-status.status-insufficient {
+    background-color: #687984;
+}
+
+.tune-advisor-mechanical-limit {
+    border-left: 4px solid #2f7fa0;
+    color: #2d4957;
+    line-height: 1.45;
+    margin-bottom: 12px;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-mechanical-summary {
+    background: #f7fafb;
+    border: 1px solid #d5dfe4;
+    border-radius: 3px;
+    color: #334650;
+    line-height: 1.5;
+    margin: 0 0 12px;
+    overflow-wrap: anywhere;
+    padding: 11px 13px;
+}
+
+.tune-advisor-mechanical-quality,
+.tune-advisor-spectrum-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tune-advisor-mechanical-quality {
+    margin-bottom: 12px;
+}
+
+.tune-advisor-mechanical-stat,
+.tune-advisor-spectrum-axis {
+    background: #fff;
+    border: 1px solid #d8e1e5;
+    border-radius: 3px;
+    min-width: 0;
+}
+
+.tune-advisor-mechanical-stat {
+    margin: 0;
+    padding: 9px 11px;
+}
+
+.tune-advisor-mechanical-stat dt {
+    color: #667680;
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.tune-advisor-mechanical-stat dd {
+    color: #182b35;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    margin: 2px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-spectrum-axis {
+    background: #f8fafb;
+    padding: 12px;
+}
+
+.tune-advisor-spectrum-axis h6 {
+    color: #172832;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-spectrum-axis-summary {
+    color: #60717b;
+    font-size: 11px;
+    line-height: 1.4;
+    margin: 5px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-spectrum-peaks {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+}
+
+.tune-advisor-spectrum-peak {
+    background: #fff;
+    border: 1px solid #dce3e7;
+    border-left: 3px solid #4d8399;
+    border-radius: 3px;
+    color: #53646e;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 8px 9px;
+}
+
+.tune-advisor-spectrum-peak + .tune-advisor-spectrum-peak {
+    margin-top: 7px;
+}
+
+.tune-advisor-spectrum-frequency {
+    color: #17313e;
+    display: block;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.tune-advisor-spectrum-detail,
+.tune-advisor-spectrum-reference {
+    display: block;
+    font-size: 10px;
+    line-height: 1.4;
+    margin-top: 2px;
+}
+
+.tune-advisor-spectrum-reference {
+    color: #72510d;
+}
+
+.tune-advisor-mechanical-actions {
+    background: #fff9ef;
+    border: 1px solid #dcc79d;
+    border-left: 5px solid #8a5d00;
+    border-radius: 3px;
+    color: #493a1c;
+    line-height: 1.45;
+    margin-top: 12px;
+    padding: 11px 13px;
+}
+
+.tune-advisor-mechanical-actions strong {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.tune-advisor-mechanical-actions ol {
+    margin: 0;
+    overflow-wrap: anywhere;
+    padding-left: 20px;
+}
+
+.tune-advisor-mechanical-actions li + li {
+    margin-top: 5px;
 }
 
 .tune-advisor-experimental-label {
@@ -634,6 +801,25 @@
         max-width: 100%;
         overflow-wrap: anywhere;
         white-space: normal;
+    }
+
+    .tune-advisor-mechanical-status {
+        display: inline-block;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    .tune-advisor-mechanical-quality,
+    .tune-advisor-spectrum-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tune-advisor-mechanical-limit,
+    .tune-advisor-mechanical-summary,
+    .tune-advisor-spectrum-axis,
+    .tune-advisor-mechanical-actions {
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
     .tune-advisor-severity {

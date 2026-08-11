@@ -354,6 +354,11 @@ function makeEligibleRuleInputs(direction) {
         minTimeUs: 0,
         maxTimeUs: 10000000,
         durationUs: 10000000,
+        mechanicalGate: {
+            status: "clear",
+            range: { startTimeUs: 0, endTimeUs: 10000000 },
+            reasonCodes: []
+        },
         poweredDurationUs: 9000000,
         sampleCount: 10000,
         invalidTimeCount: 0,
@@ -510,9 +515,21 @@ function allConfirmations(configurationKey) {
     };
 }
 
+function clearMechanicalGate(selectedRange) {
+    return {
+        status: "clear",
+        range: {
+            startTimeUs: selectedRange.startTimeUs,
+            endTimeUs: selectedRange.endTimeUs
+        },
+        reasonCodes: []
+    };
+}
+
 async function analyzeSyntheticWithFreshConfirmations(flightLog, selectedRange, userInputs) {
     const settings = {
         timeRangeUs: selectedRange,
+        mechanicalGate: clearMechanicalGate(selectedRange),
         userInputs: userInputs || { governorMaxThrottlePct: 90 },
         isCancelled: function() { return false; }
     };
@@ -675,6 +692,27 @@ function assertGovernorRecommendationTruthTable() {
             m.battery.belowConfiguredWarning = null;
         }],
         ["BATTERY_SAFETY_BLOCKER", null, function(m) { m.battery.belowConfiguredWarning = true; }],
+        ["MECHANICAL_ANALYSIS_REQUIRED", function(s) {
+            delete s.mechanicalGate;
+        }],
+        ["MECHANICAL_ATTENTION_IN_SELECTION", function(s) {
+            s.mechanicalGate = {
+                status: "attention",
+                range: { startTimeUs: s.minTimeUs, endTimeUs: s.maxTimeUs }
+            };
+        }],
+        ["MECHANICAL_ANALYSIS_UNAVAILABLE", function(s) {
+            s.mechanicalGate = {
+                status: "unavailable",
+                range: { startTimeUs: s.minTimeUs, endTimeUs: s.maxTimeUs }
+            };
+        }],
+        ["MECHANICAL_ANALYSIS_INSUFFICIENT", function(s) {
+            s.mechanicalGate = {
+                status: "insufficient",
+                range: { startTimeUs: s.minTimeUs, endTimeUs: s.maxTimeUs }
+            };
+        }],
         ["UNSAFE_FLIGHT_MODE_IN_SELECTION", function(s) { s.unsafeFlightModeSampleCount = 1; }],
         ["INFLIGHT_ADJUSTMENT_IN_SELECTION", function(s) {
             s.safetyEventCodes = ["INFLIGHT_ADJUSTMENT_IN_SELECTION"];
@@ -813,6 +851,64 @@ function assertGovernorRecommendationTruthTable() {
         "CONFIRMATION_MECHANICAL_INSPECTION_REQUIRED"
     ));
 
+    const mechanicalAttention = clone(base.snapshot);
+    mechanicalAttention.mechanicalGate = {
+        status: "attention",
+        range: {
+            startTimeUs: mechanicalAttention.minTimeUs,
+            endTimeUs: mechanicalAttention.maxTimeUs
+        }
+    };
+    const mechanicalAttentionResult = buildConfirmedRuleResult(
+        mechanicalAttention,
+        clone(base.measurement)
+    );
+    assert.strictEqual(mechanicalAttentionResult.governor.recommendation, null);
+    assert.ok(mechanicalAttentionResult.governor.recommendationGate.reasonCodes.includes(
+        "MECHANICAL_ATTENTION_IN_SELECTION"
+    ));
+    assert.ok(!mechanicalAttentionResult.findings.some(function(item) {
+        return item.id === "governor-f-next-controlled-test";
+    }));
+
+    const mechanicalUnavailable = clone(base.snapshot);
+    mechanicalUnavailable.mechanicalGate = {
+        status: "unavailable",
+        range: {
+            startTimeUs: mechanicalUnavailable.minTimeUs,
+            endTimeUs: mechanicalUnavailable.maxTimeUs
+        }
+    };
+    const mechanicalUnavailableResult = buildConfirmedRuleResult(
+        mechanicalUnavailable,
+        clone(base.measurement)
+    );
+    assert.strictEqual(mechanicalUnavailableResult.governor.recommendation, null);
+    assert.ok(mechanicalUnavailableResult.governor.recommendationGate.reasonCodes.includes(
+        "MECHANICAL_ANALYSIS_UNAVAILABLE"
+    ));
+    assert.ok(!mechanicalUnavailableResult.findings.some(function(item) {
+        return item.id === "governor-f-next-controlled-test";
+    }));
+
+    const mechanicalClear = buildConfirmedRuleResult(
+        clone(base.snapshot),
+        clone(base.measurement)
+    );
+    assert.strictEqual(mechanicalClear.governor.recommendationGate.status, "eligible");
+    assert.ok(mechanicalClear.governor.recommendation);
+
+    const mechanicalInsufficient = clone(base.snapshot);
+    mechanicalInsufficient.mechanicalGate.status = "insufficient";
+    const mechanicalInsufficientResult = buildConfirmedRuleResult(
+        mechanicalInsufficient,
+        clone(base.measurement)
+    );
+    assert.strictEqual(mechanicalInsufficientResult.governor.recommendation, null);
+    assert.ok(mechanicalInsufficientResult.governor.recommendationGate.reasonCodes.includes(
+        "MECHANICAL_ANALYSIS_INSUFFICIENT"
+    ));
+
     const upperLimit = clone(base.snapshot);
     upperLimit.governorConfiguration.fGain = 245;
     const upperResult = buildConfirmedRuleResult(upperLimit, clone(base.measurement));
@@ -849,6 +945,27 @@ async function assertRangeRejected(flightLog, timeRangeUs, expectedCode) {
     try {
         await engine.analyzeFlightLog(flightLog, {
             timeRangeUs,
+            isCancelled: function() { return false; }
+        });
+    } catch (caught) {
+        error = caught;
+    }
+
+    assert.ok(error);
+    assert.strictEqual(error.code, expectedCode);
+}
+
+async function assertMechanicalGateRejected(
+    flightLog,
+    selectedRange,
+    mechanicalGate,
+    expectedCode
+) {
+    let error = null;
+    try {
+        await engine.analyzeFlightLog(flightLog, {
+            timeRangeUs: selectedRange,
+            mechanicalGate,
             isCancelled: function() { return false; }
         });
     } catch (caught) {
@@ -1040,6 +1157,124 @@ function makeSyntheticGovernorFlightLog(inheritedHeaders, overrides) {
     };
 }
 
+async function assertMechanicalGateContract() {
+    const selectedRange = { startTimeUs: 0, endTimeUs: 5800000 };
+    const flightLog = makeSyntheticGovernorFlightLog(false);
+    const exactRange = function() {
+        return {
+            startTimeUs: selectedRange.startTimeUs,
+            endTimeUs: selectedRange.endTimeUs
+        };
+    };
+
+    await assertMechanicalGateRejected(
+        flightLog,
+        selectedRange,
+        null,
+        "MECHANICAL_GATE_INVALID"
+    );
+    await assertMechanicalGateRejected(
+        flightLog,
+        selectedRange,
+        { status: "unknown", range: exactRange() },
+        "MECHANICAL_GATE_INVALID"
+    );
+    await assertMechanicalGateRejected(
+        flightLog,
+        selectedRange,
+        {
+            status: "attention",
+            range: exactRange(),
+            reasonCodes: ["PERSISTENT_PEAK", "PERSISTENT_PEAK"]
+        },
+        "MECHANICAL_GATE_INVALID"
+    );
+    await assertMechanicalGateRejected(
+        flightLog,
+        selectedRange,
+        {
+            status: "attention",
+            range: {
+                startTimeUs: selectedRange.startTimeUs + 1,
+                endTimeUs: selectedRange.endTimeUs
+            }
+        },
+        "MECHANICAL_GATE_RANGE_MISMATCH"
+    );
+
+    const first = await engine.analyzeFlightLog(flightLog, {
+        timeRangeUs: selectedRange,
+        mechanicalGate: clearMechanicalGate(selectedRange),
+        userInputs: { governorMaxThrottlePct: 90 },
+        isCancelled: function() { return false; }
+    });
+    const confirmations = allConfirmations(
+        first.governor.recommendationGate.configurationKey
+    );
+
+    for (const status of ["attention", "unavailable"]) {
+        const reasonCode = status === "attention"
+            ? "MECHANICAL_ATTENTION_IN_SELECTION"
+            : "MECHANICAL_ANALYSIS_UNAVAILABLE";
+        const result = await engine.analyzeFlightLog(flightLog, {
+            timeRangeUs: selectedRange,
+            userInputs: { governorMaxThrottlePct: 90 },
+            confirmations,
+            mechanicalGate: {
+                status,
+                range: exactRange(),
+                reasonCodes: [reasonCode]
+            },
+            isCancelled: function() { return false; }
+        });
+        assert.strictEqual(result.governor.recommendation, null, status);
+        assert.ok(result.governor.recommendationGate.reasonCodes.includes(reasonCode));
+        assert.ok(!result.findings.some(function(item) {
+            return item.id === "governor-f-next-controlled-test";
+        }));
+    }
+
+    for (const status of ["clear", "insufficient"]) {
+        const result = await engine.analyzeFlightLog(flightLog, {
+            timeRangeUs: selectedRange,
+            userInputs: { governorMaxThrottlePct: 90 },
+            confirmations,
+            mechanicalGate: {
+                status,
+                range: exactRange(),
+                reasonCodes: status === "clear" ? [] : ["INSUFFICIENT_GYRO_DATA"]
+            },
+            isCancelled: function() { return false; }
+        });
+        if (status === "clear") {
+            assert.strictEqual(result.governor.recommendationGate.status, "eligible", status);
+            assert.ok(result.governor.recommendation, status);
+        } else {
+            assert.strictEqual(result.governor.recommendationGate.status, "withheld", status);
+            assert.strictEqual(result.governor.recommendation, null, status);
+            assert.ok(result.governor.recommendationGate.reasonCodes.includes(
+                "MECHANICAL_ANALYSIS_INSUFFICIENT"
+            ));
+        }
+    }
+
+    const suppliedGate = {
+        status: "clear",
+        range: exactRange(),
+        reasonCodes: []
+    };
+    const snapshot = await engine.scanFlightLog(flightLog, {
+        timeRangeUs: selectedRange,
+        mechanicalGate: suppliedGate,
+        isCancelled: function() { return false; }
+    });
+    assert.notStrictEqual(snapshot.mechanicalGate, suppliedGate);
+    assert.notStrictEqual(snapshot.mechanicalGate.range, suppliedGate.range);
+    assert.ok(Object.isFrozen(snapshot.mechanicalGate));
+    assert.ok(Object.isFrozen(snapshot.mechanicalGate.range));
+    assert.ok(Object.isFrozen(snapshot.mechanicalGate.reasonCodes));
+}
+
 async function assertAdapterGovernorRecommendationContract() {
     const selectedRange = { startTimeUs: 0, endTimeUs: 5800000 };
     const flightLog = makeSyntheticGovernorFlightLog(false);
@@ -1052,9 +1287,13 @@ async function assertAdapterGovernorRecommendationContract() {
     assert.ok(first.governor.recommendationGate.reasonCodes.includes(
         "CONFIRMATION_CONTEXT_REQUIRED"
     ));
+    assert.ok(first.governor.recommendationGate.reasonCodes.includes(
+        "MECHANICAL_ANALYSIS_REQUIRED"
+    ));
 
     const confirmed = await engine.analyzeFlightLog(flightLog, {
         timeRangeUs: selectedRange,
+        mechanicalGate: clearMechanicalGate(selectedRange),
         userInputs: { governorMaxThrottlePct: 90 },
         confirmations: allConfirmations(first.governor.recommendationGate.configurationKey),
         isCancelled: function() { return false; }
@@ -1561,6 +1800,7 @@ module.exports = (async function main() {
     assertGovernorRecommendationTruthTable();
     await assertCancellation();
     await assertGapBoundaryScoping();
+    await assertMechanicalGateContract();
     await assertAdapterGovernorRecommendationContract();
     await assertRotorflightFixture();
     console.log("Tune Advisor tests passed: deterministic rules and Rotorflight fixture evidence");

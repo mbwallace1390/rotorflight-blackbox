@@ -625,6 +625,27 @@
         });
 
         var recommendationReasonCodes = [];
+        if (!snapshot.mechanicalGate) {
+            addReason(
+                recommendationReasonCodes,
+                "MECHANICAL_ANALYSIS_REQUIRED"
+            );
+        } else if (snapshot.mechanicalGate.status === "attention") {
+            addReason(
+                recommendationReasonCodes,
+                "MECHANICAL_ATTENTION_IN_SELECTION"
+            );
+        } else if (snapshot.mechanicalGate.status === "insufficient") {
+            addReason(
+                recommendationReasonCodes,
+                "MECHANICAL_ANALYSIS_INSUFFICIENT"
+            );
+        } else if (snapshot.mechanicalGate.status === "unavailable") {
+            addReason(
+                recommendationReasonCodes,
+                "MECHANICAL_ANALYSIS_UNAVAILABLE"
+            );
+        }
         var machinePrerequisiteIds = [
             "firmware.rotorflight-4.6.0",
             "range.selected-only",
