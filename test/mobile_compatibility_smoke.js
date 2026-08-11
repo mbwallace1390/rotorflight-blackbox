@@ -80,7 +80,7 @@ function assertNativeOpenSeam() {
     assert.ok(androidHostSource.includes("pruneAcknowledgedSharedLogs("));
     assert.ok(androidHostSource.includes("sharedLogs.get(token)"));
     assert.ok(!androidHostSource.includes("/shared/current"));
-    assert.ok(androidHostSource.includes('VIEWER_ASSET_VERSION = "120"'));
+    assert.ok(androidHostSource.includes('VIEWER_ASSET_VERSION = "121"'));
     assert.ok(androidHostSource.includes('"/assets/index.html?v=" + VIEWER_ASSET_VERSION'));
     assert.ok(androidHostSource.includes("shouldRestoreWebViewState(savedAssetVersion)"));
     assert.ok(androidHostSource.includes("webView.restoreState(savedInstanceState)"));
@@ -185,7 +185,7 @@ function assertTuneAdvisorSelectedRangeContract() {
         /androidAssetVersion = "([0-9]+)"/
     );
     assert.ok(nativeAssetVersion && platformAssetVersion);
-    assert.strictEqual(nativeAssetVersion[1], "120");
+    assert.strictEqual(nativeAssetVersion[1], "121");
     assert.strictEqual(platformAssetVersion[1], nativeAssetVersion[1]);
     const viewerAssetVersion = nativeAssetVersion[1];
 
@@ -224,15 +224,39 @@ function assertTuneAdvisorSelectedRangeContract() {
     assert.ok(htmlSource.includes('data-user-input="governorMaxThrottlePct"'));
     assert.ok(htmlSource.includes('min="10" max="100" step="1" inputmode="numeric"'));
     assert.ok(uiSource.includes("Number.isInteger(value)"));
-    [
+    const canonicalConfirmationIds = [
         "mechanicalInspection",
         "powerSystemHealthy",
         "rpmAndGearingVerified",
         "correctProfileVerified",
         "officialTestSetup",
         "safePitchPumps"
-    ].forEach(function(confirmationId) {
-        assert.ok(htmlSource.includes('data-confirmation="' + confirmationId + '"'));
+    ];
+    assert.strictEqual(
+        (htmlSource.match(/data-flight-ready-confirmation/g) || []).length,
+        1,
+        "The six Governor F confirmations should have one explicit grouped UI acknowledgment"
+    );
+    assert.ok(!htmlSource.includes("data-flight-ready-confirmation checked"));
+    canonicalConfirmationIds.forEach(function(confirmationId) {
+        assert.ok(
+            uiSource.includes('{ key: "' + confirmationId + '" }'),
+            "The grouped UI must preserve canonical engine confirmation " + confirmationId
+        );
+        assert.ok(
+            !htmlSource.includes('data-confirmation="' + confirmationId + '"'),
+            "Canonical engine confirmations must not reappear as separate visible checkboxes"
+        );
+    });
+    [
+        "mechanical condition",
+        "RPM/gearing",
+        "power system",
+        "active aircraft profile with no change before In",
+        "conservative governed setup",
+        "site, weather, pilot readiness, bailout plan, and pitch-pump maneuver"
+    ].forEach(function(readinessCopy) {
+        assert.ok(htmlSource.includes(readinessCopy));
     });
     [
         "css/rotorlens_advisor.css",
@@ -319,6 +343,29 @@ function assertTuneAdvisorAIBridgeRuntime() {
     });
 
     const hooks = advisorWindow.RotorLensTuneAdvisorUI.testHooks;
+    const canonicalConfirmationIds = [
+        "mechanicalInspection",
+        "powerSystemHealthy",
+        "rpmAndGearingVerified",
+        "correctProfileVerified",
+        "officialTestSetup",
+        "safePitchPumps"
+    ];
+    const defaultConfirmations = hooks.emptyConfirmationValues();
+    const confirmedAsGroup = hooks.groupedConfirmationValues(true);
+    const uncheckedAsGroup = hooks.groupedConfirmationValues(false);
+    const resetConfirmations = hooks.emptyConfirmationValues();
+    canonicalConfirmationIds.forEach(function(confirmationId) {
+        assert.strictEqual(defaultConfirmations[confirmationId], false);
+        assert.strictEqual(confirmedAsGroup[confirmationId], true);
+        assert.strictEqual(uncheckedAsGroup[confirmationId], false);
+        assert.strictEqual(resetConfirmations[confirmationId], false);
+    });
+    assert.notStrictEqual(
+        confirmedAsGroup,
+        uncheckedAsGroup,
+        "Unchecking must create a fresh fail-closed canonical confirmation set"
+    );
     assert.strictEqual(
         hooks.aiBridgeAvailable(),
         false,

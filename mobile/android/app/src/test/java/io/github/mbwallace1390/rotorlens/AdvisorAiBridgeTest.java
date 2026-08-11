@@ -7,7 +7,7 @@ import org.junit.Test;
 
 public class AdvisorAiBridgeTest {
     private static final String EXPECTED =
-        "https://appassets.androidplatform.net/assets/index.html?v=120";
+        "https://appassets.androidplatform.net/assets/index.html?v=121";
 
     @Test
     public void exactDocumentAllowsSameDocumentFragments() {
@@ -35,11 +35,11 @@ public class AdvisorAiBridgeTest {
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://appassets.androidplatform.net/assets/index.html?v=120&extra=1"
+            "https://appassets.androidplatform.net/assets/index.html?v=121&extra=1"
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://appassets.androidplatform.net/assets/index.html?extra=1&v=120"
+            "https://appassets.androidplatform.net/assets/index.html?extra=1&v=121"
         ));
     }
 
@@ -47,27 +47,27 @@ public class AdvisorAiBridgeTest {
     public void originAndPathMustRemainExact() {
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "http://appassets.androidplatform.net/assets/index.html?v=120"
+            "http://appassets.androidplatform.net/assets/index.html?v=121"
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://example.com/assets/index.html?v=120"
+            "https://example.com/assets/index.html?v=121"
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://user@appassets.androidplatform.net/assets/index.html?v=120"
+            "https://user@appassets.androidplatform.net/assets/index.html?v=121"
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://appassets.androidplatform.net:443/assets/index.html?v=120"
+            "https://appassets.androidplatform.net:443/assets/index.html?v=121"
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://appassets.androidplatform.net/assets/other.html?v=120"
+            "https://appassets.androidplatform.net/assets/other.html?v=121"
         ));
         assertFalse(AdvisorAiBridge.isExpectedPageUrl(
             EXPECTED,
-            "https://appassets.androidplatform.net/assets/index.html/extra?v=120"
+            "https://appassets.androidplatform.net/assets/index.html/extra?v=121"
         ));
     }
 

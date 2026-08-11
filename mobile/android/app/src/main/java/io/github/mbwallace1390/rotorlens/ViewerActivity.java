@@ -57,7 +57,7 @@ public final class ViewerActivity extends ComponentActivity {
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     // Bump for every viewer-asset change. This keys the top page, subresources,
     // and saved WebView state so an in-place app update cannot revive stale JS.
-    static final String VIEWER_ASSET_VERSION = "120";
+    static final String VIEWER_ASSET_VERSION = "121";
     static final String START_URL = "https://" + LOCAL_HOST
         + "/assets/index.html?v=" + VIEWER_ASSET_VERSION;
     private static final String SHARED_LOG_URL_PREFIX = "https://" + LOCAL_HOST + "/shared/";

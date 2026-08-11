@@ -127,12 +127,12 @@
         CONFIRMATION_CONTEXT_REQUIRED: "Analyze this exact range once before recording its user confirmations.",
         CONFIRMATION_CONTEXT_MISMATCH: "The confirmations belong to a different range or configuration and were cleared.",
         CONFIRMATION_SESSION_REQUIRED: "The session-only confirmation binding is missing; verify the checks again in this app session.",
-        CONFIRMATION_MECHANICAL_INSPECTION_REQUIRED: "Confirm the mechanical, tail-servo, linkage, and control-authority inspection.",
-        CONFIRMATION_POWER_SYSTEM_HEALTHY_REQUIRED: "Confirm the battery, ESC, motor, wiring, and throttle-headroom checks.",
-        CONFIRMATION_RPM_AND_GEARING_REQUIRED: "Confirm the RPM sensor, motor poles or magnets, and gearing values.",
-        CONFIRMATION_CORRECT_PROFILE_REQUIRED: "Confirm the aircraft/profile provenance and no settings change before In.",
-        CONFIRMATION_OFFICIAL_TEST_SETUP_REQUIRED: "Confirm the governed mode and conservative experimental TTA/P/I/D test setup.",
-        CONFIRMATION_SAFE_PITCH_PUMPS_REQUIRED: "Confirm the controlled pitch-pump test is safe to perform.",
+        CONFIRMATION_MECHANICAL_INSPECTION_REQUIRED: "Confirm the flight-readiness acknowledgment above.",
+        CONFIRMATION_POWER_SYSTEM_HEALTHY_REQUIRED: "Confirm the flight-readiness acknowledgment above.",
+        CONFIRMATION_RPM_AND_GEARING_REQUIRED: "Confirm the flight-readiness acknowledgment above.",
+        CONFIRMATION_CORRECT_PROFILE_REQUIRED: "Confirm the flight-readiness acknowledgment above.",
+        CONFIRMATION_OFFICIAL_TEST_SETUP_REQUIRED: "Confirm the flight-readiness acknowledgment above.",
+        CONFIRMATION_SAFE_PITCH_PUMPS_REQUIRED: "Confirm the flight-readiness acknowledgment above.",
         MECHANICAL_ANALYSIS_REQUIRED: "Complete exact-range mechanical analysis before Governor F direction can be evaluated.",
         MECHANICAL_ANALYSIS_INSUFFICIENT: "The selected range did not provide enough mechanical evidence, so Governor F direction remains withheld.",
         MECHANICAL_ATTENTION_IN_SELECTION: "Selected-range vibration evidence requires a mechanics-first inspection before Governor F advice.",
@@ -174,7 +174,7 @@
     var overallStatus;
     var rerunButton;
     var confirmationFieldset;
-    var confirmationInputs;
+    var flightReadyConfirmationInput;
     var confirmationCountLabel;
     var confirmationStatus;
     var governorMaxThrottleInput;
@@ -211,7 +211,7 @@
         overallStatus = modal.find(".tune-advisor-overall-status");
         rerunButton = modal.find(".tune-advisor-rerun");
         confirmationFieldset = modal.find(".tune-advisor-confirmation-list");
-        confirmationInputs = confirmationFieldset.find("[data-confirmation]");
+        flightReadyConfirmationInput = confirmationFieldset.find("[data-flight-ready-confirmation]");
         confirmationCountLabel = modal.find(".tune-advisor-confirmation-count");
         confirmationStatus = modal.find(".tune-advisor-confirmation-status");
         governorMaxThrottleInput = modal.find("[data-user-input='governorMaxThrottlePct']");
@@ -237,6 +237,22 @@
         return values;
     }
 
+    function groupedConfirmationValues(confirmed) {
+        var values = emptyConfirmationValues();
+        if (confirmed === true) {
+            CONFIRMATION_DEFINITIONS.forEach(function(definition) {
+                values[definition.key] = true;
+            });
+        }
+        return values;
+    }
+
+    function hasConfirmationKey(key) {
+        return CONFIRMATION_DEFINITIONS.some(function(definition) {
+            return definition.key === key;
+        });
+    }
+
     function createConfirmationSessionId() {
         try {
             if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -247,12 +263,6 @@
         }
         return "advisor-" + Date.now().toString(36) + "-"
             + Math.random().toString(36).slice(2, 12);
-    }
-
-    function hasConfirmationKey(key) {
-        return CONFIRMATION_DEFINITIONS.some(function(definition) {
-            return definition.key === key;
-        });
     }
 
     function confirmationCount() {
@@ -284,10 +294,7 @@
             return;
         }
 
-        confirmationInputs.each(function() {
-            var key = this.getAttribute("data-confirmation");
-            this.checked = hasConfirmationKey(key) && confirmationValues[key] === true;
-        });
+        flightReadyConfirmationInput.prop("checked", allConfirmationsChecked());
         if (governorMaxThrottleInput.length
                 && document.activeElement !== governorMaxThrottleInput[0]) {
             governorMaxThrottleInput.val(governorMaxThrottleRaw);
@@ -297,10 +304,9 @@
             governorMaxThrottleTouched && governorMaxThrottleValue() === null ? "true" : "false"
         );
 
-        var checkedCount = confirmationCount();
-        confirmationCountLabel.text(
-            "User confirmed · " + checkedCount + " / " + CONFIRMATION_DEFINITIONS.length
-        );
+        confirmationCountLabel.text(allConfirmationsChecked()
+            ? "Flight-ready confirmed"
+            : "Not confirmed");
 
         var confirmationsEnabled = Boolean(
             currentLog
@@ -309,31 +315,30 @@
             && !confirmationBusy
         );
         confirmationFieldset.prop("disabled", false);
-        confirmationInputs.prop("disabled", !confirmationsEnabled);
-        confirmationInputs.closest(".tune-advisor-confirmation-item")
+        flightReadyConfirmationInput.prop("disabled", !confirmationsEnabled);
+        flightReadyConfirmationInput.closest(".tune-advisor-confirmation-item")
             .toggleClass("is-disabled", !confirmationsEnabled);
         governorMaxThrottleInput.prop("disabled", !(currentLog && !confirmationBusy));
 
         if (confirmationNotice) {
             confirmationStatus.text(confirmationNotice);
         } else if (!currentLog) {
-            confirmationStatus.text("Open a Blackbox log before recording user confirmations.");
+            confirmationStatus.text("Open a Blackbox log before recording flight readiness.");
         } else if (confirmationBusy) {
-            confirmationStatus.text("Measured analysis is running. User confirmations are temporarily locked.");
+            confirmationStatus.text("Measured analysis is running. The flight-readiness acknowledgment is temporarily locked.");
         } else if (governorMaxThrottleValue() === null) {
             confirmationStatus.text("Enter the active profile's configured Governor Maximum Throttle as a whole number from 10% through 100%. This user-entered value is required and is not measured from the log.");
         } else if (!confirmationContextKey) {
-            confirmationStatus.text("Analyze the selected range once to bind the user-entered value to its exact logged configuration before confirming the six checks.");
+            confirmationStatus.text("Analyze the selected range once to bind the entered value to its exact logged configuration before confirming flight readiness.");
         } else if (allConfirmationsChecked()) {
             confirmationStatus.text(
-                "All six user-entered checks and Governor Maximum Throttle "
+                "Flight readiness and Governor Maximum Throttle "
                 + formatNumber(governorMaxThrottleValue(), 0)
                 + "% are recorded for this selected range. Analyze again to apply them; no setting will be written."
             );
         } else {
             confirmationStatus.text(
-                checkedCount + " of " + CONFIRMATION_DEFINITIONS.length
-                + " user-entered checks confirmed. Governor F direction remains withheld until every user and measured gate passes."
+                "Confirm flight readiness before requesting Governor F direction. Measured safety gates must also pass."
             );
         }
     }
@@ -2480,8 +2485,14 @@
             "Directional advice stays unavailable until every measured and user-confirmed prerequisite below passes. No setting was written."
         ));
         var list = append(withheldReasonsContainer[0], element("ul", "tune-advisor-withheld-list"));
+        var displayedMessages = Object.create(null);
         reasonCodes.forEach(function(code) {
-            append(list, element("li", null, withheldReasonMessage(code)));
+            var message = withheldReasonMessage(code);
+            if (displayedMessages[message]) {
+                return;
+            }
+            displayedMessages[message] = true;
+            append(list, element("li", null, message));
         });
         withheldSection.removeAttr("hidden");
     }
@@ -2508,8 +2519,8 @@
             confirmationValues = emptyConfirmationValues();
             confirmationSessionId = createConfirmationSessionId();
             confirmationNotice = nextContextKey
-                ? "The analyzed configuration was rebound or changed. All user-entered prerequisites were cleared; verify them again before another controlled test."
-                : "The analyzed configuration key was lost. All user-entered prerequisites were cleared; analyze again before confirming them.";
+                ? "The analyzed configuration was rebound or changed. Flight readiness was cleared; confirm it again before another controlled test."
+                : "The analyzed configuration key was lost. Flight readiness was cleared; analyze again before confirming it.";
         } else {
             confirmationNotice = "";
         }
@@ -2538,11 +2549,11 @@
                 ? "Mechanical spectrum evidence requires inspection first. Governor F advice is hidden until the mechanics are checked and a new clean In/Out range is analyzed."
                 : "Governor F advice is hidden because this exact range did not produce a rigorously verified clear mechanical result.";
         } else if (validation && validation.state === "valid") {
-            confirmationNotice = "User-entered prerequisites are separate from measured log evidence. Both gates passed for the single experimental next-test proposal below; no setting was written.";
+            confirmationNotice = "The flight-readiness acknowledgment is separate from measured log evidence. Both gates passed for the single experimental next-test proposal below; no setting was written.";
         } else if (gate && gate.status === "withheld"
                 && allConfirmationsChecked()
                 && governorMaxThrottleValue() !== null) {
-            confirmationNotice = "All user-entered prerequisites are recorded, but measured evidence withheld a Governor F proposal. Review the reasons below.";
+            confirmationNotice = "Flight readiness is confirmed, but measured evidence withheld a Governor F proposal. Review the reasons below.";
         } else if (gate && gate.status === "eligible") {
             confirmationNotice = "The returned Governor F proposal did not pass the app's complete safety-contract validation. No proposal is available and no setting was written.";
         }
@@ -3063,7 +3074,7 @@
         clearMechanicalPresentation();
         progressContainer.removeAttr("hidden");
         renderPendingLogSummary();
-        setProgress(message || "User-entered prerequisites changed. Analyze the selected range again.", 0);
+        setProgress(message || "Flight readiness changed. Analyze the selected range again.", 0);
         rerunButton.prop("disabled", !(currentLog && readSelectedRange()));
         modal.attr("aria-busy", "false");
         updateConfirmationUi();
@@ -3077,7 +3088,7 @@
         confirmationBusy = false;
         confirmationNotice = governorMaxThrottleValue() === null
             ? "The selected In/Out range changed. Enter the active profile's Governor Maximum Throttle, then analyze this exact range."
-            : "The selected In/Out range changed. User confirmations were cleared; analyze this exact range before confirming them again.";
+            : "The selected In/Out range changed. Flight readiness was cleared; analyze this exact range before confirming it again.";
         updateConfirmationUi();
     }
 
@@ -3301,7 +3312,7 @@
         currentPackageRange = null;
         currentMechanicalState = null;
         resetConfirmationSession(currentLog
-            ? "A new log is active. User confirmations and Governor Maximum Throttle were cleared; verify this aircraft profile again."
+            ? "A new log is active. Flight readiness and Governor Maximum Throttle were cleared; verify this aircraft profile again."
             : "");
         setTriggerEnabled(Boolean(currentLog));
         resetPresentation();
@@ -3357,14 +3368,10 @@
             }
         });
 
-        confirmationInputs.on("change.rotorLensTuneAdvisor", function() {
-            var key = this.getAttribute("data-confirmation");
-            if (!hasConfirmationKey(key)) {
-                return;
-            }
-            confirmationValues[key] = this.checked === true;
+        flightReadyConfirmationInput.on("change.rotorLensTuneAdvisor", function() {
+            confirmationValues = groupedConfirmationValues(this.checked === true);
             confirmationNotice = "";
-            invalidatePresentation("User confirmations changed. Analyze this selected range again to apply them.");
+            invalidatePresentation("Flight-readiness acknowledgment changed. Analyze this selected range again to apply it.");
         });
 
         governorMaxThrottleInput.on("input.rotorLensTuneAdvisor change.rotorLensTuneAdvisor", function() {
@@ -3382,7 +3389,7 @@
             invalidatePresentation(
                 governorMaxThrottleValue() === null
                     ? "Enter Governor Maximum Throttle as a whole number from 10% through 100% before requesting Governor F advice."
-                    : "Governor Maximum Throttle changed. Analyze this selected range to bind the new user-entered value; confirmations were cleared."
+                    : "Governor Maximum Throttle changed. Analyze this selected range to bind the new user-entered value; flight readiness was cleared."
             );
         });
 
@@ -3422,6 +3429,8 @@
         advisorApi.testHooks = Object.freeze({
             visibleFindings: visibleFindings,
             overallState: overallState,
+            emptyConfirmationValues: emptyConfirmationValues,
+            groupedConfirmationValues: groupedConfirmationValues,
             verifiedRotorflightBuild: verifiedRotorflightBuild,
             recommendationMetadataMatches: recommendationMetadataMatches,
             exactCanonicalConfirmationIds: exactCanonicalConfirmationIds,

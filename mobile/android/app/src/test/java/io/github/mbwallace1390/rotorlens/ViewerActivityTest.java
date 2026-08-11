@@ -16,17 +16,17 @@ public class ViewerActivityTest {
     @Test
     public void startUrlIsBoundToCurrentViewerAssets() {
         assertEquals(
-            "https://appassets.androidplatform.net/assets/index.html?v=120",
+            "https://appassets.androidplatform.net/assets/index.html?v=121",
             ViewerActivity.START_URL
         );
     }
 
     @Test
     public void restoresWebViewOnlyForExactAssetVersion() {
-        assertTrue(ViewerActivity.shouldRestoreWebViewState("120"));
+        assertTrue(ViewerActivity.shouldRestoreWebViewState("121"));
         assertFalse(ViewerActivity.shouldRestoreWebViewState("119"));
         assertFalse(ViewerActivity.shouldRestoreWebViewState("118"));
-        assertFalse(ViewerActivity.shouldRestoreWebViewState("121"));
+        assertFalse(ViewerActivity.shouldRestoreWebViewState("122"));
         assertFalse(ViewerActivity.shouldRestoreWebViewState("malformed"));
         assertFalse(ViewerActivity.shouldRestoreWebViewState(null));
     }
@@ -35,10 +35,10 @@ public class ViewerActivityTest {
     public void versionedStartUrlRemainsARecognizedLocalViewerPage() {
         assertTrue(ViewerActivity.isLocalViewerUrl(ViewerActivity.START_URL));
         assertTrue(ViewerActivity.isLocalViewerUrl(
-            "https://appassets.androidplatform.net/assets/js/main.js?v=120"
+            "https://appassets.androidplatform.net/assets/js/main.js?v=121"
         ));
         assertFalse(ViewerActivity.isLocalViewerUrl(
-            "https://example.com/assets/index.html?v=120"
+            "https://example.com/assets/index.html?v=121"
         ));
         assertFalse(ViewerActivity.isLocalViewerUrl(null));
     }
