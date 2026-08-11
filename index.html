@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="css/header_dialog.css">
     <link rel="stylesheet" href="css/keys_dialog.css">
     <link rel="stylesheet" href="css/user_settings_dialog.css">
-    <link rel="stylesheet" href="css/rotorlens_advisor.css">
+    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=116">
 
     <script src="js/vendor/modernizr-2.6.2-respond-1.1.0.min.js"></script>
 </head>
@@ -651,6 +651,71 @@
 
                     <div class="tune-advisor-log-summary" aria-live="polite"></div>
 
+                    <section class="tune-advisor-confirmations" aria-labelledby="tune-advisor-confirmations-heading">
+                        <div class="tune-advisor-section-heading">
+                            <h5 id="tune-advisor-confirmations-heading">Governor F prerequisites</h5>
+                            <span class="tune-advisor-confirmation-count label label-default">0 of 6 confirmed</span>
+                        </div>
+                        <p class="tune-advisor-confirmation-intro">
+                            Confirm only checks you personally completed for this aircraft. These confirmations stay in this app session, reset when the log changes, and never authorize a settings write.
+                        </p>
+                        <fieldset class="tune-advisor-confirmation-list" disabled>
+                            <legend class="sr-only">Governor F checks verified for the current log and aircraft</legend>
+                            <div class="tune-advisor-user-input">
+                                <label for="tune-advisor-governor-max-throttle">Configured Governor Maximum Throttle (%)</label>
+                                <input type="number" class="form-control" id="tune-advisor-governor-max-throttle" min="10" max="100" step="1" inputmode="numeric" autocomplete="off" required data-user-input="governorMaxThrottlePct" aria-describedby="tune-advisor-governor-max-throttle-help">
+                                <small id="tune-advisor-governor-max-throttle-help">
+                                    Required whole-number value from 10% through 100%. It must match the active aircraft profile; Blackbox does not log this per-profile setting.
+                                </small>
+                            </div>
+                            <label class="tune-advisor-confirmation-item">
+                                <input type="checkbox" data-confirmation="mechanicalInspection">
+                                <span>
+                                    <strong>Mechanical inspection passed</strong>
+                                    <small>Blades, bearings, drivetrain, fasteners, airframe, tail servo, and main/tail linkages are healthy, tail control authority is adequate, and there is no known fault or unexplained vibration.</small>
+                                </span>
+                            </label>
+                            <label class="tune-advisor-confirmation-item">
+                                <input type="checkbox" data-confirmation="rpmAndGearingVerified">
+                                <span>
+                                    <strong>RPM setup verified</strong>
+                                    <small>RPM sensor, motor poles or magnets, and main/tail gear ratios are correct.</small>
+                                </span>
+                            </label>
+                            <label class="tune-advisor-confirmation-item">
+                                <input type="checkbox" data-confirmation="powerSystemHealthy">
+                                <span>
+                                    <strong>Power system healthy</strong>
+                                    <small>Battery, connectors, wiring, ESC, motor, and usable throttle headroom were checked.</small>
+                                </span>
+                            </label>
+                            <label class="tune-advisor-confirmation-item">
+                                <input type="checkbox" data-confirmation="correctProfileVerified">
+                                <span>
+                                    <strong>Aircraft profile verified</strong>
+                                    <small>This log and its displayed settings belong to the aircraft and active profile being evaluated, and no setting or profile changed between log start and the selected In marker (unless In is at log start).</small>
+                                </span>
+                            </label>
+                            <label class="tune-advisor-confirmation-item">
+                                <input type="checkbox" data-confirmation="officialTestSetup">
+                                <span>
+                                    <strong>Conservative experimental Governor F gate verified</strong>
+                                    <small>The active profile intentionally uses a governed mode (not bypass/direct). For this conservative experimental gate, TTA is 0 and the gains are P 10, I 20, D 0; Rotorflight's low P/I values are tuning examples, not universal official values.</small>
+                                </span>
+                            </label>
+                            <label class="tune-advisor-confirmation-item">
+                                <input type="checkbox" data-confirmation="safePitchPumps">
+                                <span>
+                                    <strong>Controlled pump test is safe</strong>
+                                    <small>Site, weather, pilot readiness, bailout plan, and collective-pump maneuver are suitable.</small>
+                                </span>
+                            </label>
+                        </fieldset>
+                        <p class="tune-advisor-confirmation-status" role="status" aria-live="polite" aria-atomic="true">
+                            Analyze the selected range once to identify its configuration before confirming these checks.
+                        </p>
+                    </section>
+
                     <div class="tune-advisor-progress" role="status" aria-live="polite" aria-atomic="true">
                         <p class="tune-advisor-progress-label">Ready to analyze this log.</p>
                         <div class="progress">
@@ -668,6 +733,22 @@
                             <div class="tune-advisor-findings"></div>
                         </section>
 
+                        <section class="tune-advisor-section tune-advisor-withheld-section" aria-labelledby="tune-advisor-withheld-heading" hidden>
+                            <div class="tune-advisor-section-heading">
+                                <h5 id="tune-advisor-withheld-heading">Why Governor F is withheld</h5>
+                                <span class="label label-default">PREREQUISITES</span>
+                            </div>
+                            <div class="tune-advisor-withheld-reasons"></div>
+                        </section>
+
+                        <section class="tune-advisor-section tune-advisor-recommendation-section" aria-labelledby="tune-advisor-recommendation-heading" hidden>
+                            <div class="tune-advisor-section-heading">
+                                <h5 id="tune-advisor-recommendation-heading">Governor F next controlled test</h5>
+                                <span class="label label-warning tune-advisor-experimental-label">EXPERIMENTAL · MANUAL REVIEW</span>
+                            </div>
+                            <div class="tune-advisor-recommendation"></div>
+                        </section>
+
                         <section class="tune-advisor-section" aria-labelledby="tune-advisor-measurements-heading">
                             <div class="tune-advisor-section-heading">
                                 <h5 id="tune-advisor-measurements-heading">Measured evidence</h5>
@@ -678,7 +759,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default tune-advisor-rerun" disabled>
-                        <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> Analyze again
+                        <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> Analyze selected range
                     </button>
                     <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
                 </div>
@@ -3565,11 +3646,11 @@
     <script src="js/laptimer.js"></script>
     <script src="js/localization.js"></script>
     <script src="js/default_workspaces.js"></script>
-    <script src="js/advisor/evidence_contract.js"></script>
-    <script src="js/advisor/deterministic_metrics.js"></script>
-    <script src="js/advisor/rules.js"></script>
-    <script src="js/advisor/flightlog_adapter.js"></script>
-    <script src="js/advisor/advisor_ui.js"></script>
+    <script src="js/advisor/evidence_contract.js?v=116"></script>
+    <script src="js/advisor/deterministic_metrics.js?v=116"></script>
+    <script src="js/advisor/rules.js?v=116"></script>
+    <script src="js/advisor/flightlog_adapter.js?v=116"></script>
+    <script src="js/advisor/advisor_ui.js?v=116"></script>
     <script src="js/main.js"></script>
     <script src="index.js"></script>
 

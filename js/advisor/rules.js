@@ -16,6 +16,32 @@
 }(typeof globalThis !== "undefined" ? globalThis : this, function(contract) {
     var MINIMUM_USEFUL_DURATION_US = 5000000;
     var MINIMUM_TRACKING_RATE_HZ = 100;
+    var MINIMUM_RECOMMENDATION_RATE_HZ = 900;
+    var MAXIMUM_RECOMMENDATION_P99_INTERVAL_US = 1500;
+    var MAXIMUM_RECOMMENDATION_FRAME_INTERVAL_US = 5000;
+    var MAXIMUM_RECOMMENDATION_JITTER_RATIO = 1.5;
+    var MINIMUM_RECOMMENDATION_TIMING_COVERAGE = 0.98;
+    var MINIMUM_SAFETY_SAMPLE_COUNT = 100;
+    var SUPPORTED_RECOMMENDATION_FIRMWARE = "4.6.0";
+    var GOVERNOR_F_STEP = 10;
+    var GOVERNOR_GAIN_MIN = 0;
+    var GOVERNOR_GAIN_MAX = 250;
+    var CONFIRMATION_IDS = Object.freeze([
+        "mechanicalInspection",
+        "powerSystemHealthy",
+        "rpmAndGearingVerified",
+        "correctProfileVerified",
+        "officialTestSetup",
+        "safePitchPumps"
+    ]);
+    var CONFIRMATION_REASON_CODES = Object.freeze({
+        mechanicalInspection: "CONFIRMATION_MECHANICAL_INSPECTION_REQUIRED",
+        powerSystemHealthy: "CONFIRMATION_POWER_SYSTEM_HEALTHY_REQUIRED",
+        rpmAndGearingVerified: "CONFIRMATION_RPM_AND_GEARING_REQUIRED",
+        correctProfileVerified: "CONFIRMATION_CORRECT_PROFILE_REQUIRED",
+        officialTestSetup: "CONFIRMATION_OFFICIAL_TEST_SETUP_REQUIRED",
+        safePitchPumps: "CONFIRMATION_SAFE_PITCH_PUMPS_REQUIRED"
+    });
 
     function round(value, digits) {
         return contract.roundNumber(value, digits);
@@ -34,7 +60,101 @@
         };
     }
 
-    function buildEvidencePackage(snapshot, measurement) {
+    function addReason(reasonCodes, code) {
+        if (reasonCodes.indexOf(code) === -1) {
+            reasonCodes.push(code);
+        }
+    }
+
+    function validGovernorGain(value) {
+        return Number.isInteger(value)
+            && value >= GOVERNOR_GAIN_MIN
+            && value <= GOVERNOR_GAIN_MAX;
+    }
+
+    function poweredCoverageComplete(snapshot, fieldName) {
+        var coverage = snapshot.safetySampleCoverage
+            && snapshot.safetySampleCoverage[fieldName];
+        return snapshot.poweredSampleCount >= MINIMUM_SAFETY_SAMPLE_COUNT
+            && coverage
+            && coverage.valid === snapshot.poweredSampleCount
+            && coverage.missing === 0;
+    }
+
+    function verifiedRecommendationFirmware(snapshot) {
+        return snapshot.firmwareTypeCode === 5
+            && snapshot.firmwareVersion === SUPPORTED_RECOMMENDATION_FIRMWARE
+            && typeof snapshot.firmwareRevisionRaw === "string"
+            && /^Rotorflight 4\.6\.0 \(118e912\) [A-Za-z0-9_.-]+$/i.test(
+                snapshot.firmwareRevisionRaw
+            );
+    }
+
+    function hashConfiguration(value) {
+        // FNV-1a is used only as a compact stale-confirmation key, not as a
+        // security primitive. The engine retains no confirmation state.
+        var hash = 2166136261;
+        for (var i = 0; i < value.length; i++) {
+            hash ^= value.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        var hex = (hash >>> 0).toString(16);
+        return "govf-" + ("00000000" + hex).slice(-8);
+    }
+
+    function configurationKey(snapshot) {
+        var config = snapshot.governorConfiguration || {};
+        return hashConfiguration([
+            snapshot.firmwareTypeCode,
+            snapshot.firmwareVersion,
+            snapshot.firmwareRevisionRaw,
+            snapshot.logIndex,
+            snapshot.minTimeUs,
+            snapshot.maxTimeUs,
+            config.pGain,
+            config.iGain,
+            config.dGain,
+            config.fGain,
+            config.masterGain,
+            config.ttaGain,
+            config.ttaLimit,
+            config.collectiveRange ? config.collectiveRange.join(",") : null,
+            config.maxThrottlePercent,
+            snapshot.selectedDataFingerprint
+        ].join("|"));
+    }
+
+    function confirmationGate(confirmations, expectedKey, reasonCodes) {
+        var input = confirmations && typeof confirmations === "object"
+            ? confirmations
+            : {};
+        var keyMatches = input.configurationKey === expectedKey;
+        var sessionPresent = typeof input.sessionId === "string"
+            && input.sessionId.trim().length > 0;
+        var confirmedIds = [];
+
+        if (!sessionPresent) {
+            addReason(reasonCodes, "CONFIRMATION_SESSION_REQUIRED");
+        }
+
+        if (!input.configurationKey) {
+            addReason(reasonCodes, "CONFIRMATION_CONTEXT_REQUIRED");
+        } else if (!keyMatches) {
+            addReason(reasonCodes, "CONFIRMATION_CONTEXT_MISMATCH");
+        }
+
+        CONFIRMATION_IDS.forEach(function(id) {
+            if (sessionPresent && keyMatches && input[id] === true) {
+                confirmedIds.push(id);
+            } else {
+                addReason(reasonCodes, CONFIRMATION_REASON_CODES[id]);
+            }
+        });
+
+        return confirmedIds;
+    }
+
+    function buildEvidencePackage(snapshot, measurement, confirmations) {
         if (!contract) {
             throw new Error("Tune Advisor evidence contract was not loaded");
         }
@@ -46,6 +166,7 @@
         var cautionCount = 0;
         var invalidSampleCount = snapshot.invalidTimeCount + snapshot.invalidRequiredValueCount;
         var selectedTimeRange = [snapshot.minTimeUs, snapshot.maxTimeUs];
+        var firmwareBuildVerified = verifiedRecommendationFirmware(snapshot);
 
         qualityEvidenceIds.push(evidence.add({
             id: "quality.duration",
@@ -60,6 +181,22 @@
             metric: "Measured logging rate",
             value: round(measurement.quality.sampleRateHz, 2),
             unit: "Hz",
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
+        }));
+        qualityEvidenceIds.push(evidence.add({
+            id: "quality.effective-sample-rate",
+            metric: "Effective selected-range logging rate",
+            value: round(measurement.quality.effectiveSampleRateHz, 2),
+            unit: "Hz",
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
+        }));
+        qualityEvidenceIds.push(evidence.add({
+            id: "quality.p99-frame-interval",
+            metric: "Frame interval p99",
+            value: round(measurement.quality.p99FrameIntervalUs, 0),
+            unit: "us",
             scope: "selected-range",
             timeRangeUs: selectedTimeRange
         }));
@@ -180,9 +317,19 @@
         var rxProblemCount = snapshot.failsafeSampleCount
             + snapshot.rxLossSampleCount
             + snapshot.invalidRxChannelsSampleCount;
+        var failsafeSamplesComplete = poweredCoverageComplete(snapshot, "failsafePhase");
+        var rxSignalSamplesComplete = poweredCoverageComplete(snapshot, "rxSignalReceived");
+        var rxChannelSamplesComplete = poweredCoverageComplete(
+            snapshot,
+            "rxFlightChannelsValid"
+        );
+        var flightModeSamplesComplete = poweredCoverageComplete(snapshot, "flightModeFlags");
+        var batterySamplesComplete = poweredCoverageComplete(snapshot, "battery");
         var rxSafetyEvaluable = snapshot.coverage.failsafePhase === true
             && snapshot.coverage.rxHealth === true
-            && snapshot.poweredSampleCount > 0;
+            && failsafeSamplesComplete
+            && rxSignalSamplesComplete
+            && rxChannelSamplesComplete;
         var rxEvidenceId = evidence.add({
             id: "safety.rx-health",
             metric: "Powered samples with failsafe or invalid RX data",
@@ -290,6 +437,7 @@
         }
 
         var batterySafetyEvaluable = battery.available
+            && batterySamplesComplete
             && battery.minimumCellVolts !== null
             && battery.warningCellVolts !== null
             && typeof battery.belowConfiguredWarning === "boolean";
@@ -321,34 +469,40 @@
 
         var governor = measurement.governor;
         var governorEvidenceIds = [];
+        var governorConfigurationEvidenceIds = [];
+        var pumpEvidenceIds = [];
         if (governor.available) {
             governorEvidenceIds.push(evidence.add({
                 id: "governor.target-rpm",
                 metric: "Median active target headspeed",
                 value: round(governor.targetRpm, 0),
                 unit: "rpm",
-                scope: "governor-active"
+                scope: "governor-active",
+                timeRangeUs: selectedTimeRange
             }));
             governorEvidenceIds.push(evidence.add({
                 id: "governor.rmse",
                 metric: "Active headspeed tracking RMSE",
                 value: round(governor.rmseRpm, 1),
                 unit: "rpm",
-                scope: "governor-active"
+                scope: "governor-active",
+                timeRangeUs: selectedTimeRange
             }));
             governorEvidenceIds.push(evidence.add({
                 id: "governor.maximum-droop",
                 metric: "Maximum active headspeed droop",
                 value: round(governor.maxDroopRpm, 0),
                 unit: "rpm",
-                scope: "governor-active"
+                scope: "governor-active",
+                timeRangeUs: selectedTimeRange
             }));
             governorEvidenceIds.push(evidence.add({
                 id: "governor.maximum-overshoot",
                 metric: "Maximum active headspeed overshoot",
                 value: round(governor.maxOvershootRpm, 0),
                 unit: "rpm",
-                scope: "governor-active"
+                scope: "governor-active",
+                timeRangeUs: selectedTimeRange
             }));
             if (governor.motorP95Pct !== null) {
                 governorEvidenceIds.push(evidence.add({
@@ -356,15 +510,409 @@
                     metric: "Governor-active motor output p95",
                     value: round(governor.motorP95Pct, 1),
                     unit: "%",
-                    scope: "governor-active"
+                    scope: "governor-active",
+                    timeRangeUs: selectedTimeRange
                 }));
             }
         }
 
-        // V1 intentionally never turns a log into a gain direction. A log does
-        // not prove mechanical health, TTA/P/I test setup, receiver coverage,
-        // battery health, or the configured motor ceiling. Those prerequisites
-        // need explicit confirmation plus controlled before/after logs.
+        governorEvidenceIds.push(evidence.add({
+            id: "governor.active-event-in-selection",
+            metric: "Explicit governor ACTIVE event inside selected range",
+            value: governor.explicitActiveEventWithinRange === true,
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
+        }));
+        governorEvidenceIds.push(evidence.add({
+            id: "governor.full-rate-records",
+            metric: "Governor records retained without Advisor downsampling",
+            value: governor.fullRateRecords === true,
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
+        }));
+
+        var governorConfiguration = snapshot.governorConfiguration || {};
+        [
+            ["p", governorConfiguration.pGain],
+            ["i", governorConfiguration.iGain],
+            ["d", governorConfiguration.dGain],
+            ["f", governorConfiguration.fGain],
+            ["master", governorConfiguration.masterGain],
+            ["tta", governorConfiguration.ttaGain]
+        ].forEach(function(setting) {
+            if (!Number.isFinite(setting[1])) {
+                return;
+            }
+            governorConfigurationEvidenceIds.push(evidence.add({
+                id: "governor.setting." + setting[0],
+                metric: "Logged governor " + setting[0].toUpperCase() + " setting",
+                value: setting[1],
+                unit: "gain",
+                scope: "configuration-applied-to-selected-range",
+                timeRangeUs: selectedTimeRange
+            }));
+        });
+        if (Number.isFinite(governorConfiguration.maxThrottlePercent)) {
+            governorConfigurationEvidenceIds.push(evidence.add({
+                id: "governor.setting.max-throttle",
+                metric: "User-provided current-profile governor maximum throttle",
+                value: governorConfiguration.maxThrottlePercent,
+                unit: "%",
+                scope: governorConfiguration.maxThrottleSource,
+                timeRangeUs: selectedTimeRange
+            }));
+        }
+
+        var pitchPumps = governor.pitchPumps || {
+            candidateCount: 0,
+            eligibleCount: 0,
+            truncatedWindowCount: 0,
+            overlappingWindowCount: 0,
+            unstableTargetWindowCount: 0,
+            targetStable: false,
+            missingRequestWindowCount: 0,
+            unstableRequestWindowCount: 0,
+            requestEvidenceAvailable: false,
+            requestStable: false,
+            missingArmWindowCount: 0,
+            unarmedWindowCount: 0,
+            armEvidenceComplete: false,
+            allPumpWindowsArmed: false,
+            crossPumpHeadSpeedStable: false,
+            windowEvaluationLimitReached: false,
+            droopCount: 0,
+            overshootCount: 0,
+            sufficient: false,
+            direction: null,
+            headroomSufficient: false,
+            tailEvidenceAvailable: false,
+            tailDegradationDetected: false,
+            tailStable: false,
+            windows: []
+        };
+        pumpEvidenceIds.push(evidence.add({
+            id: "governor.pitch-pump-consistency",
+            metric: "Consistent normalized pitch-pump responses",
+            value: {
+                candidates: pitchPumps.candidateCount,
+                eligible: pitchPumps.eligibleCount,
+                droop: pitchPumps.droopCount,
+                overshoot: pitchPumps.overshootCount,
+                sufficient: pitchPumps.sufficient
+            },
+            scope: "selected-range",
+            timeRangeUs: selectedTimeRange
+        }));
+        (pitchPumps.windows || []).forEach(function(window, index) {
+            if (!Number.isFinite(window.baselineStartTimeUs)
+                    || !Number.isFinite(window.endTimeUs)
+                    || window.baselineStartTimeUs < snapshot.minTimeUs
+                    || window.endTimeUs > snapshot.maxTimeUs) {
+                return;
+            }
+            pumpEvidenceIds.push(evidence.add({
+                id: "governor.pitch-pump." + (index + 1),
+                metric: "Normalized pitch-pump response",
+                value: {
+                    classification: window.classification,
+                    motorHeadroomPct: round(window.motorHeadroomPct, 1),
+                    baselineYawRmsDps: round(window.baselineYawRmsDps, 1),
+                    responseYawRmsDps: round(window.responseYawRmsDps, 1)
+                },
+                scope: "selected-range",
+                timeRangeUs: [window.baselineStartTimeUs, window.endTimeUs]
+            }));
+        });
+
+        var recommendationReasonCodes = [];
+        var machinePrerequisiteIds = [
+            "firmware.rotorflight-4.6.0",
+            "range.selected-only",
+            "logging.minimum-900hz",
+            "governor.explicit-active-event",
+            "governor.required-fields",
+            "governor.logged-current-settings",
+            "governor.conservative-f-test-baseline",
+            "governor.user-max-throttle",
+            "safety.rx-clear",
+            "safety.battery-clear",
+            "safety.tail-stable",
+            "test.three-consistent-normalized-pumps"
+        ];
+        var recommendationPrerequisiteIds = CONFIRMATION_IDS.slice();
+        var expectedConfigurationKey = configurationKey(snapshot);
+
+        if (snapshot.firmwareTypeCode !== 5
+                || snapshot.firmwareVersion !== SUPPORTED_RECOMMENDATION_FIRMWARE) {
+            addReason(recommendationReasonCodes, "UNSUPPORTED_FIRMWARE");
+        } else if (!verifiedRecommendationFirmware(snapshot)) {
+            addReason(recommendationReasonCodes, "UNVERIFIED_FIRMWARE_BUILD");
+        }
+        if (!Number.isFinite(measurement.quality.sampleRateHz)) {
+            addReason(recommendationReasonCodes, "SAMPLE_RATE_UNAVAILABLE");
+        } else if (measurement.quality.sampleRateHz < MINIMUM_RECOMMENDATION_RATE_HZ) {
+            addReason(recommendationReasonCodes, "SAMPLE_RATE_BELOW_900_HZ");
+        }
+        if (!Number.isFinite(measurement.quality.effectiveSampleRateHz)
+                || measurement.quality.effectiveSampleRateHz
+                    < MINIMUM_RECOMMENDATION_RATE_HZ) {
+            addReason(recommendationReasonCodes, "EFFECTIVE_SAMPLE_RATE_BELOW_900_HZ");
+        }
+        if (!Number.isFinite(measurement.quality.p99FrameIntervalUs)
+                || measurement.quality.p99FrameIntervalUs
+                    > MAXIMUM_RECOMMENDATION_P99_INTERVAL_US) {
+            addReason(recommendationReasonCodes, "TIMING_P99_TOO_HIGH");
+        }
+        if (!Number.isFinite(measurement.quality.maximumFrameIntervalUs)
+                || measurement.quality.maximumFrameIntervalUs
+                    > MAXIMUM_RECOMMENDATION_FRAME_INTERVAL_US) {
+            addReason(recommendationReasonCodes, "MAX_FRAME_INTERVAL_TOO_HIGH");
+        }
+        if (!Number.isFinite(measurement.quality.frameIntervalJitterRatio)
+                || measurement.quality.frameIntervalJitterRatio
+                    > MAXIMUM_RECOMMENDATION_JITTER_RATIO) {
+            addReason(recommendationReasonCodes, "TIMING_JITTER_TOO_HIGH");
+        }
+        if (!Number.isFinite(measurement.quality.timingCoverageRatio)
+                || measurement.quality.timingCoverageRatio
+                    < MINIMUM_RECOMMENDATION_TIMING_COVERAGE) {
+            addReason(recommendationReasonCodes, "TIMING_COVERAGE_INCOMPLETE");
+        }
+        if (snapshot.poweredDurationUs < MINIMUM_USEFUL_DURATION_US) {
+            addReason(recommendationReasonCodes, "POWERED_DURATION_TOO_SHORT");
+        }
+        if ((Number.isFinite(snapshot.corruptFrames) && snapshot.corruptFrames > 0)
+                || snapshot.discontinuities > 0
+                || invalidSampleCount > 0) {
+            addReason(recommendationReasonCodes, "SELECTED_RANGE_NOT_CLEAN");
+        }
+        if (snapshot.invalidGovernorValueCount > 0) {
+            addReason(recommendationReasonCodes, "GOVERNOR_VALUES_INVALID_IN_SELECTION");
+        }
+        if ((snapshot.configurationWarnings || []).length > 0) {
+            addReason(recommendationReasonCodes, "LOGGING_HEADER_INCOMPLETE");
+        }
+        if (snapshot.invalidTimeCount > 0) {
+            addReason(recommendationReasonCodes, "NON_MONOTONIC_TIMESTAMP_IN_SELECTION");
+        }
+        if (snapshot.numericPlausibilityViolationCount > 0
+                || governorConfiguration.numericPlausible === false
+                || governorConfiguration.invalidLoggedGainValues === true
+                || governorConfiguration.invalidCollectiveRangeValues === true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_NUMERIC_VALUES_IMPLAUSIBLE");
+        }
+
+        var coverage = snapshot.coverage || {};
+        if (!coverage.governorRequest || !coverage.governorTarget || !coverage.governorActual) {
+            addReason(recommendationReasonCodes, "REQUIRED_GOVERNOR_FIELDS_MISSING");
+        }
+        if (!coverage.collective) {
+            addReason(recommendationReasonCodes, "COLLECTIVE_FIELD_MISSING");
+        }
+        if (!coverage.collectiveRange) {
+            addReason(recommendationReasonCodes, "COLLECTIVE_RANGE_HEADER_MISSING");
+        }
+        if (!coverage.mainMotor) {
+            addReason(recommendationReasonCodes, "MAIN_MOTOR_FIELD_MISSING");
+        }
+        if (!coverage.failsafePhase) {
+            addReason(recommendationReasonCodes, "FAILSAFE_FIELD_MISSING");
+        }
+        if (!coverage.flightModeFlags) {
+            addReason(recommendationReasonCodes, "FLIGHT_MODE_FIELD_MISSING");
+        }
+        if (!coverage.rxHealth) {
+            addReason(recommendationReasonCodes, "RX_FIELDS_MISSING");
+        }
+        if (!coverage.battery) {
+            addReason(recommendationReasonCodes, "BATTERY_FIELD_MISSING");
+        }
+        if (!coverage.batteryConfiguration) {
+            addReason(recommendationReasonCodes, "BATTERY_CONFIGURATION_HEADER_MISSING");
+        }
+        if (snapshot.batteryConfigurationStatus === "invalid") {
+            addReason(recommendationReasonCodes, "BATTERY_CONFIGURATION_INVALID");
+        }
+        if (!coverage.setpointAxes || !coverage.setpointAxes[2]
+                || !coverage.gyroAxes || !coverage.gyroAxes[2]) {
+            addReason(recommendationReasonCodes, "TAIL_FIELDS_MISSING");
+        }
+
+        if (!failsafeSamplesComplete) {
+            addReason(recommendationReasonCodes, "FAILSAFE_SAMPLES_INCOMPLETE");
+        }
+        if (!rxSignalSamplesComplete) {
+            addReason(recommendationReasonCodes, "RX_SIGNAL_SAMPLES_INCOMPLETE");
+        }
+        if (!rxChannelSamplesComplete) {
+            addReason(recommendationReasonCodes, "RX_CHANNEL_SAMPLES_INCOMPLETE");
+        }
+        if (!flightModeSamplesComplete) {
+            addReason(recommendationReasonCodes, "FLIGHT_MODE_SAMPLES_INCOMPLETE");
+        }
+        if (!batterySamplesComplete) {
+            addReason(recommendationReasonCodes, "BATTERY_SAMPLES_INCOMPLETE");
+        }
+        if (!rxSafetyEvaluable) {
+            addReason(recommendationReasonCodes, "RX_SAFETY_UNKNOWN");
+        }
+        if (rxProblemCount > 0) {
+            addReason(recommendationReasonCodes, "RX_SAFETY_BLOCKER");
+        }
+        if (!batterySafetyEvaluable) {
+            addReason(recommendationReasonCodes, "BATTERY_SAFETY_UNKNOWN");
+        } else if (battery.belowConfiguredWarning === true) {
+            addReason(recommendationReasonCodes, "BATTERY_SAFETY_BLOCKER");
+        }
+        (snapshot.safetyEventCodes || []).forEach(function(code) {
+            addReason(recommendationReasonCodes, code);
+        });
+        if (snapshot.unsafeFlightModeSampleCount > 0) {
+            addReason(recommendationReasonCodes, "UNSAFE_FLIGHT_MODE_IN_SELECTION");
+        }
+
+        if (!governor.explicitActiveEventWithinRange) {
+            addReason(recommendationReasonCodes, "ACTIVE_EVENT_MISSING_IN_SELECTION");
+        }
+        if (governor.stateSequenceSafe !== true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_STATE_SEQUENCE_UNSAFE");
+        }
+        if (governor.eventsComplete !== true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_EVENTS_TRUNCATED");
+        }
+        if (!governor.available) {
+            addReason(recommendationReasonCodes, "GOVERNOR_ACTIVE_DATA_INSUFFICIENT");
+        }
+        if (governor.fullRateRecords !== true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_RECORDS_NOT_FULL_RATE");
+        }
+
+        var loggedGovernorSettingsValid = governorConfiguration.govPidLogged === true
+            && validGovernorGain(governorConfiguration.pGain)
+            && validGovernorGain(governorConfiguration.iGain)
+            && validGovernorGain(governorConfiguration.dGain)
+            && validGovernorGain(governorConfiguration.fGain)
+            && validGovernorGain(governorConfiguration.masterGain);
+        if (!loggedGovernorSettingsValid) {
+            addReason(recommendationReasonCodes, "GOVERNOR_SETTINGS_MISSING_OR_INVALID");
+        } else if (governorConfiguration.pGain !== 10
+                || governorConfiguration.iGain !== 20
+                || governorConfiguration.dGain !== 0) {
+            addReason(recommendationReasonCodes, "CONSERVATIVE_F_TEST_PID_BASELINE_REQUIRED");
+        }
+        if (governorConfiguration.ttaLogged !== true
+                || !validGovernorGain(governorConfiguration.ttaGain)) {
+            addReason(recommendationReasonCodes, "GOVERNOR_TTA_MISSING_OR_INVALID");
+        } else if (governorConfiguration.ttaGain !== 0) {
+            addReason(recommendationReasonCodes, "GOVERNOR_TTA_MUST_BE_ZERO");
+        }
+        if (governorConfiguration.maxThrottleInputStatus === "invalid") {
+            addReason(recommendationReasonCodes, "GOVERNOR_MAX_THROTTLE_INVALID");
+        } else if (!Number.isFinite(governorConfiguration.maxThrottlePercent)) {
+            addReason(recommendationReasonCodes, "GOVERNOR_MAX_THROTTLE_REQUIRED");
+        }
+
+        if (pitchPumps.truncatedWindowCount > 0) {
+            addReason(recommendationReasonCodes, "TRUNCATED_PUMP_WINDOW_IN_SELECTION");
+        }
+        if (pitchPumps.overlappingWindowCount > 0) {
+            addReason(recommendationReasonCodes, "OVERLAPPING_PUMP_WINDOWS");
+        }
+        if (pitchPumps.windowEvaluationLimitReached) {
+            addReason(recommendationReasonCodes, "PUMP_WINDOW_EVALUATION_LIMIT_REACHED");
+        }
+        if (pitchPumps.targetStable !== true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_TARGET_UNSTABLE");
+        }
+        if (pitchPumps.requestEvidenceAvailable !== true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_REQUEST_EVIDENCE_INCOMPLETE");
+        }
+        if (pitchPumps.requestStable !== true) {
+            addReason(recommendationReasonCodes, "GOVERNOR_REQUEST_UNSTABLE");
+        }
+        if (pitchPumps.armEvidenceComplete !== true) {
+            addReason(recommendationReasonCodes, "ARM_EVIDENCE_INCOMPLETE");
+        }
+        if (pitchPumps.allPumpWindowsArmed !== true) {
+            addReason(recommendationReasonCodes, "UNARMED_PUMP_WINDOW");
+        }
+        if (pitchPumps.crossPumpHeadSpeedStable !== true) {
+            addReason(recommendationReasonCodes, "CROSS_PUMP_HEADSPEED_INCONSISTENT");
+        }
+        if (pitchPumps.candidateCount < 3) {
+            addReason(recommendationReasonCodes, "INSUFFICIENT_PITCH_PUMPS");
+        } else if (!pitchPumps.sufficient) {
+            addReason(recommendationReasonCodes, "INCONSISTENT_PITCH_PUMPS");
+        }
+        if (pitchPumps.candidateCount >= 3
+                && Number.isFinite(governorConfiguration.maxThrottlePercent)
+                && !pitchPumps.headroomSufficient) {
+            addReason(recommendationReasonCodes, "MOTOR_HEADROOM_INSUFFICIENT");
+        }
+        if (pitchPumps.candidateCount >= 3 && !pitchPumps.tailEvidenceAvailable) {
+            addReason(recommendationReasonCodes, "TAIL_EVIDENCE_INCOMPLETE");
+        }
+        if (pitchPumps.tailDegradationDetected) {
+            addReason(recommendationReasonCodes, "TAIL_RESPONSE_DEGRADED");
+        } else if (pitchPumps.candidateCount >= 3
+                && pitchPumps.tailEvidenceAvailable
+                && !pitchPumps.tailStable) {
+            addReason(recommendationReasonCodes, "TAIL_TEST_NOT_CONTROLLED");
+        }
+
+        var confirmedConfirmationIds = confirmationGate(
+            confirmations,
+            expectedConfigurationKey,
+            recommendationReasonCodes
+        );
+        var recommendation = null;
+        if (recommendationReasonCodes.length === 0
+                && (pitchPumps.direction === "increase" || pitchPumps.direction === "decrease")) {
+            var requestedDelta = pitchPumps.direction === "increase"
+                ? GOVERNOR_F_STEP
+                : -GOVERNOR_F_STEP;
+            var proposedValue = Math.min(
+                GOVERNOR_GAIN_MAX,
+                Math.max(GOVERNOR_GAIN_MIN, governorConfiguration.fGain + requestedDelta)
+            );
+            if (proposedValue - governorConfiguration.fGain !== requestedDelta) {
+                addReason(recommendationReasonCodes, "GOVERNOR_F_FULL_STEP_OUT_OF_RANGE");
+            } else {
+                var recommendationEvidenceIds = governorEvidenceIds
+                    .concat(governorConfigurationEvidenceIds)
+                    .concat(pumpEvidenceIds);
+                recommendation = {
+                    kind: "next-controlled-test",
+                    experimental: true,
+                    setting: "gov_f_gain",
+                    currentValue: governorConfiguration.fGain,
+                    proposedValue: proposedValue,
+                    rollbackValue: governorConfiguration.fGain,
+                    requestedDelta: requestedDelta,
+                    delta: requestedDelta,
+                    direction: pitchPumps.direction,
+                    reasonCode: pitchPumps.direction === "increase"
+                        ? "CONSISTENT_DROOP"
+                        : "CONSISTENT_OVERSHOOT",
+                    reasonCodes: [pitchPumps.direction === "increase"
+                        ? "CONSISTENT_DROOP"
+                        : "CONSISTENT_OVERSHOOT"],
+                    prerequisiteIds: recommendationPrerequisiteIds,
+                    evidenceIds: recommendationEvidenceIds,
+                    sourceIds: ["rotorflight-governor-tuning"],
+                    provenance: {
+                        analysisMode: "deterministic-local",
+                        ruleset: "rotorlens-governor-f-next-test-v1",
+                        firmwareShortRevision: "118e912",
+                        selectedRangeOnly: true
+                    },
+                    directWriteAllowed: false,
+                    validationRequired: true,
+                    finalTuneClaim: false
+                };
+            }
+        }
+
         if (!governor.available) {
             findings.push(finding(
                 "governor-targeted-log-needed",
@@ -375,22 +923,39 @@
                 governorEvidenceIds,
                 ["rotorflight-governor-tuning"]
             ));
-        } else {
+        } else if (!recommendation) {
             findings.push(finding(
                 "governor-prerequisites-required",
                 "info",
                 "Governor response measured; gain advice withheld",
-                "Target, actual headspeed, and Motor 1 were measured, but a log cannot prove every mechanical, power, receiver, setup, and motor-limit prerequisite required for a safe gain decision.",
-                "Use the official Rotorflight governor procedure and controlled repeat logs. This Advisor version does not recommend raising or lowering a gain.",
-                governorEvidenceIds,
+                "The selected range was measured, but one or more deterministic safety or test prerequisites did not pass.",
+                "Resolve the listed prerequisite codes, reconfirm the current range and profile, then rerun. No setting will be written.",
+                governorEvidenceIds.concat(governorConfigurationEvidenceIds, pumpEvidenceIds),
                 ["rotorflight-governor-tuning"]
+            ));
+        } else {
+            findings.push(finding(
+                "governor-f-next-controlled-test",
+                "caution",
+                "Governor F next controlled test is ready",
+                "Repeated normalized pitch pumps showed consistent "
+                    + (recommendation.direction === "increase" ? "droop" : "overshoot")
+                    + " with measured motor headroom and stable tail response.",
+                "Test only gov_f_gain " + recommendation.currentValue + " → "
+                    + recommendation.proposedValue + ". Keep " + recommendation.rollbackValue
+                    + " as the rollback value and capture a matched comparison log before accepting the change.",
+                recommendation.evidenceIds,
+                ["rotorflight-governor-tuning"],
+                selectedTimeRange
             ));
         }
 
         var qualityStatus = blockerCount > 0
             ? "blocked"
             : (cautionCount > 0 ? "caution" : "pass");
-        var governorStatus = governor.available ? "limited" : "unsupported";
+        var governorStatus = recommendation
+            ? "available"
+            : (governor.available ? "limited" : "unsupported");
         var qualityGrade = qualityStatus === "blocked"
             ? "blocked"
             : (qualityStatus === "caution" ? "limited" : "supported");
@@ -408,6 +973,12 @@
             log: {
                 firmwareType: snapshot.firmwareType,
                 firmwareVersion: snapshot.firmwareVersion,
+                firmwareBuildVerified: firmwareBuildVerified,
+                firmwareBuild: {
+                    verified: firmwareBuildVerified,
+                    shortRevision: firmwareBuildVerified ? "118e912" : null,
+                    raw: snapshot.firmwareRevisionRaw || null
+                },
                 logIndex: snapshot.logIndex,
                 startTimeUs: snapshot.logMinTimeUs,
                 endTimeUs: snapshot.logMaxTimeUs,
@@ -420,6 +991,13 @@
                 endOffsetUs: snapshot.maxTimeUs - snapshot.logMinTimeUs,
                 durationUs: snapshot.durationUs,
                 sampleRateHz: round(measurement.quality.sampleRateHz, 2),
+                effectiveSampleRateHz: round(measurement.quality.effectiveSampleRateHz, 2),
+                p99FrameIntervalUs: round(measurement.quality.p99FrameIntervalUs, 0),
+                maximumFrameIntervalUs: round(
+                    measurement.quality.maximumFrameIntervalUs,
+                    0
+                ),
+                timingCoverageRatio: round(measurement.quality.timingCoverageRatio, 4),
                 sampleCount: snapshot.sampleCount,
                 poweredDurationUs: snapshot.poweredDurationUs
             },
@@ -441,6 +1019,7 @@
                 status: rxSafetyEvaluable && batterySafetyEvaluable ? "supported" : "limited",
                 rxSafety: rxSafetyEvaluable ? "available" : "unknown",
                 batterySafety: batterySafetyEvaluable ? "available" : "unknown",
+                safetySamples: snapshot.safetySampleCoverage || null,
                 debugMode: snapshot.debugName,
                 governorSource: snapshot.governorSource
             }),
@@ -471,10 +1050,36 @@
                 maxDroopRpm: round(governor.maxDroopRpm, 0),
                 maxOvershootRpm: round(governor.maxOvershootRpm, 0),
                 motorP95Pct: round(governor.motorP95Pct, 1),
+                motorCeilingPct: round(governor.motorCeilingPercent, 1),
+                motorHeadroomPct: round(governor.motorHeadroomPercent, 1),
                 headroomSufficient: governor.headroomSufficient,
                 pitchPumpCount: governor.pitchPumps ? governor.pitchPumps.candidateCount : 0,
-                direction: null,
+                eligiblePitchPumpCount: pitchPumps.eligibleCount,
+                direction: recommendation ? recommendation.direction : null,
+                currentSettings: {
+                    pGain: governorConfiguration.pGain,
+                    iGain: governorConfiguration.iGain,
+                    dGain: governorConfiguration.dGain,
+                    fGain: governorConfiguration.fGain,
+                    masterGain: governorConfiguration.masterGain,
+                    ttaGain: governorConfiguration.ttaGain,
+                    maxThrottlePct: governorConfiguration.maxThrottlePercent,
+                    maxThrottleSource: governorConfiguration.maxThrottleSource
+                },
+                recommendationGate: {
+                    status: recommendation ? "eligible" : "withheld",
+                    firmwareBuildVerified: firmwareBuildVerified,
+                    configurationKey: expectedConfigurationKey,
+                    reasonCodes: recommendationReasonCodes,
+                    machinePrerequisiteIds: machinePrerequisiteIds,
+                    requiredConfirmationIds: CONFIRMATION_IDS,
+                    confirmedConfirmationIds: confirmedConfirmationIds,
+                    userInputIds: ["governorMaxThrottlePct"]
+                },
+                recommendation: recommendation,
                 evidenceIds: governorEvidenceIds
+                    .concat(governorConfigurationEvidenceIds)
+                    .concat(pumpEvidenceIds)
             },
             evidence: evidence.items,
             findings: findings

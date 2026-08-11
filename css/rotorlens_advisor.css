@@ -75,6 +75,153 @@
     overflow-wrap: anywhere;
 }
 
+.tune-advisor-confirmations {
+    background: #f7fafb;
+    border: 1px solid #d5dfe4;
+    border-left: 4px solid #58798a;
+    border-radius: 3px;
+    margin-bottom: 18px;
+    padding: 15px 16px 13px;
+}
+
+.tune-advisor-confirmations .tune-advisor-section-heading {
+    margin-bottom: 7px;
+}
+
+.tune-advisor-confirmation-count {
+    background-color: #58798a;
+    font-size: 9px;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+}
+
+.tune-advisor-confirmation-intro,
+.tune-advisor-confirmation-status {
+    color: #53636e;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.tune-advisor-confirmation-intro {
+    font-size: 12px;
+    margin-bottom: 11px;
+}
+
+.tune-advisor-confirmation-list {
+    border: 0;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+}
+
+.tune-advisor-user-input {
+    align-items: center;
+    background: #eef4f6;
+    border: 1px solid #cedbe1;
+    border-radius: 3px;
+    display: grid;
+    gap: 4px 12px;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    min-width: 0;
+    padding: 10px 11px;
+}
+
+.tune-advisor-user-input label {
+    color: #172832;
+    font-size: 12px;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-user-input input {
+    font-size: 16px;
+    height: 44px;
+    min-width: 0;
+}
+
+.tune-advisor-user-input input[aria-invalid="true"] {
+    border-color: #a83b32;
+    box-shadow: 0 0 0 2px rgba(168, 59, 50, 0.14);
+}
+
+.tune-advisor-user-input small {
+    color: #5b6d77;
+    display: block;
+    font-size: 11px;
+    grid-column: 1 / -1;
+    line-height: 1.4;
+}
+
+.tune-advisor-confirmation-item {
+    align-items: flex-start;
+    background: #fff;
+    border: 1px solid #d8e0e4;
+    border-radius: 3px;
+    color: #24343e;
+    cursor: pointer;
+    display: flex;
+    font-weight: 400;
+    gap: 10px;
+    line-height: 1.35;
+    margin: 0;
+    min-height: 62px;
+    overflow-wrap: anywhere;
+    padding: 10px 11px;
+}
+
+.tune-advisor-confirmation-item:focus-within {
+    border-color: #0b7fa3;
+    box-shadow: 0 0 0 2px rgba(11, 127, 163, 0.2);
+}
+
+.tune-advisor-confirmation-item.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.tune-advisor-confirmation-item input {
+    accent-color: #0b7fa3;
+    flex: 0 0 auto;
+    height: 21px;
+    margin: 1px 0 0;
+    width: 21px;
+}
+
+.tune-advisor-confirmation-item span,
+.tune-advisor-confirmation-item strong,
+.tune-advisor-confirmation-item small {
+    display: block;
+    min-width: 0;
+}
+
+.tune-advisor-confirmation-item strong {
+    color: #172832;
+    font-size: 12px;
+}
+
+.tune-advisor-confirmation-item small {
+    color: #64737d;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+.tune-advisor-confirmation-list[disabled] {
+    opacity: 0.62;
+}
+
+.tune-advisor-confirmation-list[disabled] .tune-advisor-confirmation-item {
+    cursor: not-allowed;
+}
+
+.tune-advisor-confirmation-status {
+    font-size: 11px;
+    margin-top: 9px;
+}
+
 .tune-advisor-progress-label {
     color: #3f4f5b;
     font-size: 13px;
@@ -93,7 +240,9 @@
 }
 
 .tune-advisor-results[hidden],
-.tune-advisor-error[hidden] {
+.tune-advisor-error[hidden],
+.tune-advisor-withheld-section[hidden],
+.tune-advisor-recommendation-section[hidden] {
     display: none !important;
 }
 
@@ -133,6 +282,14 @@
 
 .tune-advisor-overall-status.status-blocked {
     background-color: #a83b32;
+}
+
+.tune-advisor-experimental-label {
+    background-color: #624200;
+    color: #fff;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .tune-advisor-finding {
@@ -243,6 +400,108 @@
     content: " \2197";
 }
 
+.tune-advisor-recommendation-card {
+    background: #f4faf7;
+    border: 1px solid #b9d8c5;
+    border-left: 5px solid #377b4b;
+    border-radius: 3px;
+    color: #293b33;
+    padding: 15px 16px;
+}
+
+.tune-advisor-recommendation-warning,
+.tune-advisor-recommendation-reason,
+.tune-advisor-recommendation-validation {
+    line-height: 1.5;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-recommendation-warning {
+    color: #2f4938;
+    font-weight: 600;
+}
+
+.tune-advisor-recommendation-values {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 12px 0;
+}
+
+.tune-advisor-recommendation-value {
+    background: #fff;
+    border: 1px solid #cfe0d5;
+    border-radius: 3px;
+    margin: 0;
+    min-width: 0;
+    padding: 10px;
+}
+
+.tune-advisor-recommendation-value dt {
+    color: #64746b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+}
+
+.tune-advisor-recommendation-value dd {
+    color: #173323;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    margin: 3px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-recommendation-reason strong,
+.tune-advisor-recommendation-validation strong {
+    color: #1b3325;
+}
+
+.tune-advisor-recommendation-validation {
+    background: #fff;
+    border-radius: 3px;
+    margin-top: 11px;
+    padding: 9px 11px;
+}
+
+.tune-advisor-recommendation-error {
+    background: #fff5f3;
+    border: 1px solid #e3b9b3;
+    border-left: 5px solid #a83b32;
+    border-radius: 3px;
+    color: #77352f;
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px 14px;
+}
+
+.tune-advisor-withheld-reasons {
+    background: #fff9ef;
+    border: 1px solid #dcc79d;
+    border-left: 5px solid #8a5d00;
+    border-radius: 3px;
+    color: #493a1c;
+    line-height: 1.45;
+    padding: 12px 14px;
+}
+
+.tune-advisor-withheld-reasons > p {
+    margin: 0 0 8px;
+}
+
+.tune-advisor-withheld-list {
+    margin: 0;
+    overflow-wrap: anywhere;
+    padding-left: 20px;
+}
+
+.tune-advisor-withheld-list li + li {
+    margin-top: 5px;
+}
+
 .tune-advisor-measurement-column {
     margin-bottom: 12px;
 }
@@ -339,6 +598,28 @@
         margin-top: 4px;
     }
 
+    .tune-advisor-confirmations {
+        margin-bottom: 13px;
+        padding: 11px 10px 10px;
+    }
+
+    .tune-advisor-confirmation-list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tune-advisor-user-input {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tune-advisor-user-input input {
+        width: 100%;
+    }
+
+    .tune-advisor-confirmation-item {
+        min-height: 58px;
+        padding: 10px;
+    }
+
     .tune-advisor-finding-header {
         display: block;
     }
@@ -362,5 +643,13 @@
 
     .tune-advisor-measurement-card {
         min-height: 0;
+    }
+
+    .tune-advisor-recommendation-values {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tune-advisor-recommendation-card {
+        padding: 12px;
     }
 }

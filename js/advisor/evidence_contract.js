@@ -11,8 +11,8 @@
         root.RotorLensAdvisorEvidenceContract = api;
     }
 }(typeof globalThis !== "undefined" ? globalThis : this, function() {
-    var SCHEMA_VERSION = 2;
-    var ENGINE_VERSION = "0.2.0";
+    var SCHEMA_VERSION = 3;
+    var ENGINE_VERSION = "0.3.0";
     var MAX_EVIDENCE_ITEMS = 96;
     var MAX_FINDINGS = 32;
 
@@ -105,9 +105,15 @@
             capabilities: {
                 cloudRequired: false,
                 directSettingWrites: false,
-                settingDirectionAdvice: false,
+                settingDirectionAdvice: true,
                 selectedRangeRequired: true,
                 rawLogIncluded: false
+            },
+            recommendationPolicy: {
+                settingAllowlist: ["gov_f_gain"],
+                outputKind: "next-controlled-test",
+                directSettingWrites: false,
+                finalTuneClaims: false
             },
             log: sections.log,
             range: sections.range,

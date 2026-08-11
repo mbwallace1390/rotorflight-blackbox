@@ -145,6 +145,9 @@ function assertTuneAdvisorSelectedRangeContract() {
     const controlsSource = source("js/android_controls.js");
     const advisorSource = source("js/advisor/flightlog_adapter.js");
     const contractSource = source("js/advisor/evidence_contract.js");
+    const rulesSource = source("js/advisor/rules.js");
+    const uiSource = source("js/advisor/advisor_ui.js");
+    const htmlSource = source("index.html");
     const platformSource = source("index.js");
 
     assert.ok(mainSource.includes("function getSelectedAnalysisRange()"));
@@ -160,7 +163,217 @@ function assertTuneAdvisorSelectedRangeContract() {
     assert.ok(advisorSource.includes('"ANALYSIS_RANGE_REQUIRED"'));
     assert.ok(advisorSource.includes("options.timeRangeUs"));
     assert.ok(contractSource.includes("selectedRangeRequired: true"));
-    assert.ok(platformSource.includes('androidAssetVersion = "115"'));
+    assert.ok(rulesSource.includes('setting: "gov_f_gain"'));
+    assert.ok(rulesSource.includes('directWriteAllowed: false'));
+    assert.ok(rulesSource.includes('finalTuneClaim: false'));
+    assert.ok(rulesSource.includes("118e912"));
+    assert.ok(uiSource.includes("function evidenceRangeWithinSelection("));
+    assert.ok(uiSource.includes("timeRangeUs[0] < timeRangeUs[1]"));
+    assert.ok(uiSource.includes("function renderResults(evidencePackage, submittedRange)"));
+    assert.ok(htmlSource.includes('data-user-input="governorMaxThrottlePct"'));
+    assert.ok(htmlSource.includes('min="10" max="100" step="1" inputmode="numeric"'));
+    assert.ok(uiSource.includes("Number.isInteger(value)"));
+    [
+        "mechanicalInspection",
+        "powerSystemHealthy",
+        "rpmAndGearingVerified",
+        "correctProfileVerified",
+        "officialTestSetup",
+        "safePitchPumps"
+    ].forEach(function(confirmationId) {
+        assert.ok(htmlSource.includes('data-confirmation="' + confirmationId + '"'));
+    });
+    [
+        "css/rotorlens_advisor.css?v=116",
+        "js/advisor/evidence_contract.js?v=116",
+        "js/advisor/deterministic_metrics.js?v=116",
+        "js/advisor/rules.js?v=116",
+        "js/advisor/flightlog_adapter.js?v=116",
+        "js/advisor/advisor_ui.js?v=116"
+    ].forEach(function(assetUrl) {
+        assert.ok(htmlSource.includes(assetUrl), "Missing versioned Advisor asset " + assetUrl);
+    });
+    assert.ok(platformSource.includes('androidAssetVersion = "116"'));
+}
+
+function assertTuneAdvisorResultValidationRuntime() {
+    const advisorWindow = {
+        __ROTORLENS_ADVISOR_TEST__: true,
+        jQuery: function() {
+            // Do not invoke the document-ready callback; these hooks are pure.
+            return {};
+        }
+    };
+    const context = vm.createContext({
+        Date,
+        Math,
+        URL,
+        document: {},
+        window: advisorWindow
+    });
+
+    vm.runInContext(source("js/advisor/advisor_ui.js"), context, {
+        filename: "js/advisor/advisor_ui.js"
+    });
+
+    const hooks = advisorWindow.RotorLensTuneAdvisorUI.testHooks;
+    const nonWithholdCodes = new Set([
+        "ANALYSIS_CANCELLED",
+        "ANALYSIS_RANGE_INVALID",
+        "ANALYSIS_RANGE_REQUIRED",
+        "CONSISTENT_DROOP",
+        "CONSISTENT_OVERSHOOT"
+    ]);
+    const finalGateCodes = Array.from(new Set(
+        (source("js/advisor/rules.js") + source("js/advisor/flightlog_adapter.js"))
+            .match(/"[A-Z][A-Z0-9_]+"/g)
+            .map(function(quotedCode) { return quotedCode.slice(1, -1); })
+            .filter(function(code) {
+                return code.includes("_") && !nonWithholdCodes.has(code);
+            })
+    ));
+    finalGateCodes.forEach(function(code) {
+        assert.strictEqual(
+            hooks.hasCuratedWithheldReason(code),
+            true,
+            "Missing curated Governor F withhold wording for " + code
+        );
+    });
+    const verifiedBuildLog = {
+        firmwareType: "Rotorflight",
+        firmwareVersion: "4.6.0",
+        firmwareBuild: {
+            verified: true,
+            shortRevision: "118e912",
+            raw: "Rotorflight 4.6.0 (118e912) STM32F7X2"
+        }
+    };
+    assert.strictEqual(hooks.verifiedRotorflightBuild(verifiedBuildLog), true);
+    assert.strictEqual(
+        hooks.verifiedRotorflightBuild({
+            firmwareType: "Rotorflight",
+            firmwareVersion: "4.6.0"
+        }),
+        false,
+        "A missing structured firmware build must fail closed"
+    );
+    assert.strictEqual(
+        hooks.verifiedRotorflightBuild(Object.assign({}, verifiedBuildLog, {
+            firmwareBuild: {
+                verified: true,
+                shortRevision: "118e912"
+            }
+        })),
+        false,
+        "A missing raw firmware revision must fail closed"
+    );
+    assert.strictEqual(
+        hooks.verifiedRotorflightBuild(Object.assign({}, verifiedBuildLog, {
+            firmwareBuild: {
+                verified: true,
+                shortRevision: "abcdef1",
+                raw: "Rotorflight 4.6.0 (abcdef1) STM32F7X2"
+            }
+        })),
+        false,
+        "A wrong firmware revision hash must fail closed"
+    );
+    const recommendationMetadata = {
+        experimental: true,
+        sourceIds: ["rotorflight-governor-tuning"],
+        provenance: {
+            analysisMode: "deterministic-local",
+            ruleset: "rotorlens-governor-f-next-test-v1",
+            firmwareShortRevision: "118e912",
+            selectedRangeOnly: true
+        }
+    };
+    assert.strictEqual(hooks.recommendationMetadataMatches(recommendationMetadata), true);
+    assert.strictEqual(
+        hooks.recommendationMetadataMatches(Object.assign({}, recommendationMetadata, {
+            experimental: false
+        })),
+        false,
+        "A recommendation without the experimental marker must fail closed"
+    );
+    assert.strictEqual(
+        hooks.recommendationMetadataMatches(Object.assign({}, recommendationMetadata, {
+            sourceIds: ["unknown-source"]
+        })),
+        false,
+        "A recommendation without the official Governor source ID must fail closed"
+    );
+    const canonicalConfirmationIds = [
+        "mechanicalInspection",
+        "powerSystemHealthy",
+        "rpmAndGearingVerified",
+        "correctProfileVerified",
+        "officialTestSetup",
+        "safePitchPumps"
+    ];
+    assert.strictEqual(hooks.exactCanonicalConfirmationIds(canonicalConfirmationIds), true);
+    assert.strictEqual(
+        hooks.exactCanonicalConfirmationIds(canonicalConfirmationIds.slice(0, 5)),
+        false,
+        "A missing confirmation ID must fail closed"
+    );
+    assert.strictEqual(
+        hooks.exactCanonicalConfirmationIds(canonicalConfirmationIds.slice(0, 5).concat(
+            "mechanicalInspection"
+        )),
+        false,
+        "Duplicate confirmation IDs must not satisfy the gate"
+    );
+    const positiveFinding = {
+        id: "governor-f-next-controlled-test",
+        severity: "caution"
+    };
+    const ordinaryFinding = {
+        id: "governor-prerequisites-required",
+        severity: "info"
+    };
+    const evidencePackage = {
+        findings: [positiveFinding, ordinaryFinding],
+        grade: { overall: "supported" },
+        quality: { status: "pass" }
+    };
+
+    assert.deepStrictEqual(
+        Array.from(hooks.visibleFindings(evidencePackage, { state: "invalid" }), function(finding) {
+            return finding.id;
+        }),
+        ["governor-prerequisites-required"],
+        "An invalid recommendation must not render the positive next-test finding"
+    );
+    const rejectedState = hooks.overallState(evidencePackage, { state: "invalid" });
+    assert.strictEqual(rejectedState.className, "status-blocked");
+    assert.strictEqual(
+        rejectedState.label,
+        "Safety contract rejected · No advice",
+        "An invalid recommendation must visibly fail closed"
+    );
+    assert.strictEqual(
+        hooks.visibleFindings(evidencePackage, { state: "valid" }).length,
+        2,
+        "A fully validated recommendation may retain its positive next-test finding"
+    );
+
+    const productionWindow = { jQuery: function() { return {}; } };
+    const productionContext = vm.createContext({
+        Date,
+        Math,
+        URL,
+        document: {},
+        window: productionWindow
+    });
+    vm.runInContext(source("js/advisor/advisor_ui.js"), productionContext, {
+        filename: "js/advisor/advisor_ui.js"
+    });
+    assert.deepStrictEqual(
+        Object.keys(productionWindow.RotorLensTuneAdvisorUI).sort(),
+        ["cancel", "open", "setCurrentLog"],
+        "Pure test hooks must not be exposed by the production Advisor API"
+    );
 }
 
 assertMobileAssetURLs();
@@ -169,5 +382,6 @@ assertMobileGraphDropdownSupport();
 assertMobileHeaderDialogLayout();
 assertSpectrumRangeCap();
 assertTuneAdvisorSelectedRangeContract();
+assertTuneAdvisorResultValidationRuntime();
 
 console.log("Mobile compatibility smoke tests passed: hosted assets, ranges, and mobile layouts");
