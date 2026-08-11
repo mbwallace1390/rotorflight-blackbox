@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="css/header_dialog.css">
     <link rel="stylesheet" href="css/keys_dialog.css">
     <link rel="stylesheet" href="css/user_settings_dialog.css">
-    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=117">
+    <link rel="stylesheet" href="css/rotorlens_advisor.css?v=120">
 
     <script src="js/vendor/modernizr-2.6.2-respond-1.1.0.min.js"></script>
 </head>
@@ -765,6 +765,27 @@
                                 <h5 id="tune-advisor-measurements-heading">Measured evidence</h5>
                             </div>
                             <div class="tune-advisor-measurements row"></div>
+                        </section>
+
+                        <section class="tune-advisor-section tune-advisor-ai-section" aria-labelledby="tune-advisor-ai-heading" hidden>
+                            <div class="tune-advisor-section-heading">
+                                <h5 id="tune-advisor-ai-heading">AI Coach for this selected range</h5>
+                                <span class="label label-info tune-advisor-ai-badge">ON DEVICE</span>
+                            </div>
+                            <div class="tune-advisor-ai-boundary" role="note">
+                                <strong>Private and bounded.</strong>
+                                The model runs on this phone and receives only validated status, reason, and bounded code choices from the exact graph In/Out range above—not the raw log, settings, identity, or measured fact values. AI chooses which allowed validated finding and next step appear first; native code creates and validates every displayed card. It cannot create or override tuning advice and never writes flight-controller settings.
+                            </div>
+                            <p class="tune-advisor-ai-download-note">
+                                The first use needs an approximately 329 MiB one-time model download. Wi-Fi is recommended.
+                            </p>
+                            <p class="tune-advisor-ai-status" role="status" aria-live="polite" aria-atomic="true">
+                                Checking on-device AI availability…
+                            </p>
+                            <div class="tune-advisor-ai-result" aria-live="polite" hidden></div>
+                            <button type="button" class="btn btn-info tune-advisor-ai-action" disabled aria-describedby="tune-advisor-ai-heading">
+                                Check AI Coach
+                            </button>
                         </section>
                     </div>
                 </div>
@@ -3657,14 +3678,15 @@
     <script src="js/laptimer.js"></script>
     <script src="js/localization.js"></script>
     <script src="js/default_workspaces.js"></script>
-    <script src="js/advisor/evidence_contract.js?v=117"></script>
-    <script src="js/advisor/deterministic_metrics.js?v=117"></script>
-    <script src="js/advisor/rules.js?v=117"></script>
-    <script src="js/advisor/flightlog_adapter.js?v=117"></script>
-    <script src="js/advisor/mechanical_analysis.js?v=117"></script>
-    <script src="js/advisor/advisor_ui.js?v=117"></script>
-    <script src="js/main.js"></script>
-    <script src="index.js"></script>
+    <script src="js/advisor/evidence_contract.js?v=120"></script>
+    <script src="js/advisor/deterministic_metrics.js?v=120"></script>
+    <script src="js/advisor/rules.js?v=120"></script>
+    <script src="js/advisor/flightlog_adapter.js?v=120"></script>
+    <script src="js/advisor/mechanical_analysis.js?v=120"></script>
+    <script src="js/advisor/ai_contract.js?v=120"></script>
+    <script src="js/advisor/advisor_ui.js?v=120"></script>
+    <script src="js/main.js?v=120"></script>
+    <script src="index.js?v=120"></script>
 
     <dialog class="dialogUpdate">
         <h3 i18n="noticeTitle"></h3>

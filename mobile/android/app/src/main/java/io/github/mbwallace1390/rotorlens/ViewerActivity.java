@@ -55,10 +55,15 @@ public final class ViewerActivity extends ComponentActivity {
     private static final int WEB_FILE_CHOOSER_REQUEST = 1001;
     private static final int IMMEDIATE_LOG_PICKER_REQUEST = 1002;
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
-    private static final String START_URL = "https://" + LOCAL_HOST + "/assets/index.html";
+    // Bump for every viewer-asset change. This keys the top page, subresources,
+    // and saved WebView state so an in-place app update cannot revive stale JS.
+    static final String VIEWER_ASSET_VERSION = "120";
+    static final String START_URL = "https://" + LOCAL_HOST
+        + "/assets/index.html?v=" + VIEWER_ASSET_VERSION;
     private static final String SHARED_LOG_URL_PREFIX = "https://" + LOCAL_HOST + "/shared/";
     private static final String SHARED_LOG_ACK_URL_PREFIX = "https://" + LOCAL_HOST + "/shared-ack/";
     private static final String IMPORT_DIRECTORY_NAME = "imported-logs";
+    private static final String STATE_VIEWER_ASSET_VERSION = "viewer.assetVersion";
     private static final String STATE_SHARED_FILE_NAME = "viewer.sharedFileName";
     private static final String STATE_SHARED_DISPLAY_NAME = "viewer.sharedDisplayName";
     private static final String STATE_SHARED_MIME_TYPE = "viewer.sharedMimeType";
@@ -75,6 +80,7 @@ public final class ViewerActivity extends ComponentActivity {
     private final LinkedHashMap<String, SharedLogResource> sharedLogs = new LinkedHashMap<>();
 
     private WebView webView;
+    private AdvisorAiBridge advisorAiBridge;
     private ValueCallback<Uri[]> filePathCallback;
     private volatile File sharedLogFile;
     private volatile String sharedLogToken;
@@ -98,7 +104,11 @@ public final class ViewerActivity extends ComponentActivity {
         configureWebView();
         processIncomingIntent(getIntent());
 
-        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
+        String savedAssetVersion = savedInstanceState == null
+            ? null
+            : savedInstanceState.getString(STATE_VIEWER_ASSET_VERSION);
+        if (!shouldRestoreWebViewState(savedAssetVersion)
+                || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(START_URL);
         }
 
@@ -169,6 +179,9 @@ public final class ViewerActivity extends ComponentActivity {
                 return true;
             }
         });
+
+        advisorAiBridge = new AdvisorAiBridge(this, webView, START_URL);
+        advisorAiBridge.install();
     }
 
     private void launchImmediatePickerIfRequested(Intent intent) {
@@ -585,7 +598,24 @@ public final class ViewerActivity extends ComponentActivity {
             outState.putString(STATE_SHARED_MIME_TYPE, sharedLogMimeType);
         }
         webView.saveState(outState);
+        outState.putString(STATE_VIEWER_ASSET_VERSION, VIEWER_ASSET_VERSION);
         super.onSaveInstanceState(outState);
+    }
+
+    static boolean shouldRestoreWebViewState(@Nullable String savedAssetVersion) {
+        return VIEWER_ASSET_VERSION.equals(savedAssetVersion);
+    }
+
+    static boolean isLocalViewerUrl(@Nullable String url) {
+        return url != null && url.startsWith("https://" + LOCAL_HOST + "/assets/");
+    }
+
+    @Override
+    protected void onStop() {
+        if (advisorAiBridge != null) {
+            advisorAiBridge.onBackground();
+        }
+        super.onStop();
     }
 
     @Override
@@ -598,6 +628,11 @@ public final class ViewerActivity extends ComponentActivity {
         }
 
         importExecutor.shutdownNow();
+
+        if (advisorAiBridge != null) {
+            advisorAiBridge.close();
+            advisorAiBridge = null;
+        }
 
         if (webView != null) {
             webView.stopLoading();
@@ -770,6 +805,9 @@ public final class ViewerActivity extends ComponentActivity {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
+            if (advisorAiBridge != null) {
+                advisorAiBridge.onNavigation();
+            }
             if (isLocalViewerUrl(url)) {
                 pageReady = false;
             }
@@ -796,10 +834,6 @@ public final class ViewerActivity extends ComponentActivity {
         @SuppressWarnings("deprecation")
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
             return openExternalUrl(Uri.parse(url));
-        }
-
-        private boolean isLocalViewerUrl(String url) {
-            return url != null && url.startsWith("https://" + LOCAL_HOST + "/assets/");
         }
 
         private boolean openExternalUrl(Uri uri) {

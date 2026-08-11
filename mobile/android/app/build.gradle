@@ -74,6 +74,10 @@ def nativeBuildStagingDirectory = new File(
 
 def viewerWebRoot = rootProject.projectDir.parentFile.parentFile
 def generatedViewerAssets = layout.buildDirectory.dir("generated/viewerAssets")
+def liteRtLmNoticeArtifact = configurations.detachedConfiguration(
+    dependencies.create("com.google.ai.edge.litertlm:litertlm-android:0.15.0")
+)
+liteRtLmNoticeArtifact.transitive = false
 
 // Use repository history for monotonic RotorLens preview versions. The new
 // package ID can coexist with legacy org.rotorflight.blackbox installations.
@@ -128,6 +132,14 @@ def syncViewerAssets = tasks.register("syncViewerAssets", Sync) {
         include "node_modules/html2canvas/**"
         include "node_modules/lodash/**"
         include "node_modules/webm-writer/**"
+    }
+
+    // Carry the exact native third-party notice from the pinned AAR into the
+    // app's existing legal viewer. This stays version-locked to the runtime.
+    from({ liteRtLmNoticeArtifact.collect { zipTree(it) } }) {
+        include "THIRD_PARTY_NOTICE.txt"
+        into "legal"
+        rename { "LITERTLM-0.15.0-THIRD_PARTY_NOTICE.txt" }
     }
 
     into generatedViewerAssets
@@ -249,6 +261,7 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation("androidx.activity:activity:1.13.0")
     implementation("androidx.webkit:webkit:1.16.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.15.0")
     testImplementation("junit:junit:4.13.2")
 
     if (hermesEnabled.toBoolean()) {

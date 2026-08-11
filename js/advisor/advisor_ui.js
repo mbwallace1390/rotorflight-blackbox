@@ -16,6 +16,33 @@
         spectrum: "Measuring selected-range vibration spectrum",
         findings: "Checking spectrum evidence"
     };
+    var AI_PROTOCOL_VERSION = 1;
+    var AI_MAX_REQUEST_BYTES = 32768;
+    var AI_MAX_RESPONSE_BYTES = 9 * 1024;
+    // Native bounds the full model SHA scan at 120s; leave reply-delivery headroom.
+    var AI_STATUS_TIMEOUT_MS = 125000;
+    // Native bounds inference at 120s; leave reply-delivery headroom on slower phones.
+    var AI_REQUEST_TIMEOUT_MS = 125000;
+    var AI_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+    var AI_BINDING_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/;
+    var AI_RESPONSE_TYPES = Object.freeze([
+        "advisor.status.result",
+        "advisor.download.progress",
+        "advisor.download.result",
+        "advisor.explain.result",
+        "advisor.error"
+    ]);
+    var AI_ERROR_MESSAGES = Object.freeze({
+        AI_UNAVAILABLE: "On-device AI is unavailable on this phone or app build.",
+        MODEL_NOT_INSTALLED: "The on-device model has not been installed yet.",
+        DOWNLOAD_FAILED: "The model download did not finish. Check the connection and try again.",
+        REQUEST_INVALID: "AI Coach rejected an invalid selected-range request.",
+        REQUEST_TOO_LARGE: "The validated fact package was too large for AI Coach.",
+        TIMEOUT: "AI Coach took too long and stopped safely.",
+        CANCELLED: "AI Coach was cancelled.",
+        BUSY: "On-device AI is busy. Wait a moment and try again.",
+        INTERNAL: "AI Coach could not finish this explanation."
+    });
     var CONFIRMATION_DEFINITIONS = Object.freeze([
         { key: "mechanicalInspection" },
         { key: "powerSystemHealthy" },
@@ -128,6 +155,12 @@
     var confirmationNotice = "";
     var governorMaxThrottleRaw = "";
     var governorMaxThrottleTouched = false;
+    var aiCoachBinding = null;
+    var aiCoachRequest = null;
+    var aiCoachState = "unavailable";
+    var aiBridgeBound = false;
+    var aiModelReady = false;
+    var aiCoachRetryKind = null;
 
     var modal;
     var logSummary;
@@ -152,6 +185,10 @@
     var mechanicalSection;
     var mechanicalStatus;
     var mechanicalContainer;
+    var aiCoachSection;
+    var aiCoachStatus;
+    var aiCoachResult;
+    var aiCoachAction;
 
     function cacheElements() {
         if (modal && modal.length) {
@@ -185,6 +222,10 @@
         mechanicalSection = modal.find(".tune-advisor-mechanical-section");
         mechanicalStatus = modal.find(".tune-advisor-mechanical-status");
         mechanicalContainer = modal.find(".tune-advisor-mechanical");
+        aiCoachSection = modal.find(".tune-advisor-ai-section");
+        aiCoachStatus = modal.find(".tune-advisor-ai-status");
+        aiCoachResult = modal.find(".tune-advisor-ai-result");
+        aiCoachAction = modal.find(".tune-advisor-ai-action");
         return true;
     }
 
@@ -389,8 +430,8 @@
 
         var range = currentContext.getSelectedRange();
         if (!range
-                || !isFiniteNumber(range.startTimeUs)
-                || !isFiniteNumber(range.endTimeUs)
+                || !Number.isSafeInteger(range.startTimeUs)
+                || !Number.isSafeInteger(range.endTimeUs)
                 || range.startTimeUs >= range.endTimeUs) {
             return null;
         }
@@ -411,6 +452,239 @@
         return {
             startTimeUs: range.startTimeUs,
             endTimeUs: range.endTimeUs
+        };
+    }
+
+    function createAIRequestId() {
+        try {
+            if (window.crypto && typeof window.crypto.randomUUID === "function") {
+                return window.crypto.randomUUID();
+            }
+        } catch (error) {
+            // A request UUID is a stale-response key, not a security token.
+        }
+
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(marker) {
+            var random = Math.floor(Math.random() * 16);
+            var value = marker === "x" ? random : ((random & 3) | 8);
+            return value.toString(16);
+        });
+    }
+
+    function utf8ByteLength(value) {
+        var text = String(value || "");
+        var bytes = 0;
+        for (var index = 0; index < text.length; index++) {
+            var code = text.charCodeAt(index);
+            if (code < 0x80) {
+                bytes += 1;
+            } else if (code < 0x800) {
+                bytes += 2;
+            } else if (code >= 0xD800 && code <= 0xDBFF
+                    && index + 1 < text.length
+                    && text.charCodeAt(index + 1) >= 0xDC00
+                    && text.charCodeAt(index + 1) <= 0xDFFF) {
+                bytes += 4;
+                index++;
+            } else {
+                bytes += 3;
+            }
+        }
+        return bytes;
+    }
+
+    function isObjectRecord(value) {
+        return Boolean(value && typeof value === "object" && !Array.isArray(value));
+    }
+
+    function nativeAIBridge() {
+        var bridge = window.advisorAI;
+        return bridge && typeof bridge.postMessage === "function" ? bridge : null;
+    }
+
+    function aiBridgeAvailable() {
+        return Boolean(nativeAIBridge());
+    }
+
+    function parseAIBridgeMessage(eventOrValue) {
+        var value = eventOrValue && eventOrValue.data !== undefined
+            ? eventOrValue.data : eventOrValue;
+        if (typeof value === "string") {
+            if (utf8ByteLength(value) > AI_MAX_RESPONSE_BYTES) {
+                return null;
+            }
+            try {
+                value = JSON.parse(value);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        if (!isObjectRecord(value)
+                || Object.keys(value).length !== 4
+                || !Object.prototype.hasOwnProperty.call(value, "v")
+                || !Object.prototype.hasOwnProperty.call(value, "type")
+                || !Object.prototype.hasOwnProperty.call(value, "requestId")
+                || !Object.prototype.hasOwnProperty.call(value, "payload")
+                || value.v !== AI_PROTOCOL_VERSION
+                || AI_RESPONSE_TYPES.indexOf(value.type) < 0
+                || typeof value.requestId !== "string"
+                || !AI_BINDING_PATTERN.test(value.requestId)
+                || !isObjectRecord(value.payload)) {
+            return null;
+        }
+        return value;
+    }
+
+    function hasExactObjectKeys(value, keys) {
+        if (!isObjectRecord(value) || Object.keys(value).length !== keys.length) {
+            return false;
+        }
+        return keys.every(function(key) {
+            return Object.prototype.hasOwnProperty.call(value, key);
+        });
+    }
+
+    function responseTypeMatchesAIRequest(messageType, requestKind) {
+        if (messageType === "advisor.error") {
+            return true;
+        }
+        if (requestKind === "status") {
+            return messageType === "advisor.status.result";
+        }
+        if (requestKind === "download") {
+            return messageType === "advisor.download.progress"
+                || messageType === "advisor.download.result";
+        }
+        if (requestKind === "explain") {
+            return messageType === "advisor.explain.result";
+        }
+        return false;
+    }
+
+    function validAIBridgePayloadShape(message) {
+        var payload = message && message.payload;
+        if (!payload
+                || typeof payload.rangeBinding !== "string"
+                || !AI_BINDING_PATTERN.test(payload.rangeBinding)
+                || !Number.isSafeInteger(payload.generation)
+                || payload.generation < 0) {
+            return false;
+        }
+
+        if (message.type === "advisor.explain.result") {
+            // The safety contract performs the exact, code-only response check.
+            return true;
+        }
+        if (message.type === "advisor.error") {
+            return hasExactObjectKeys(payload, ["rangeBinding", "generation", "code"])
+                && typeof payload.code === "string"
+                && Object.prototype.hasOwnProperty.call(AI_ERROR_MESSAGES, payload.code);
+        }
+        if (message.type === "advisor.download.progress") {
+            return hasExactObjectKeys(payload, [
+                "rangeBinding",
+                "generation",
+                "state",
+                "downloadedBytes",
+                "totalBytes"
+            ])
+                && payload.state === "downloading"
+                && Number.isSafeInteger(payload.downloadedBytes)
+                && Number.isSafeInteger(payload.totalBytes)
+                && payload.downloadedBytes >= 0
+                && payload.totalBytes > 0
+                && payload.downloadedBytes <= payload.totalBytes;
+        }
+        if (!hasExactObjectKeys(payload, ["rangeBinding", "generation", "state"])) {
+            return false;
+        }
+        if (message.type === "advisor.status.result") {
+            return ["unavailable", "not-installed", "downloading", "ready"]
+                .indexOf(payload.state) >= 0;
+        }
+        if (message.type === "advisor.download.result") {
+            return ["unavailable", "not-installed", "ready"].indexOf(payload.state) >= 0;
+        }
+        return false;
+    }
+
+    function responseMatchesAIRequest(message, request, liveGeneration, liveRange) {
+        var payload = message && message.payload;
+        return Boolean(
+            request
+            && message
+            && payload
+            && message.requestId === request.requestId
+            && payload.rangeBinding === request.rangeBinding
+            && payload.generation === request.generation
+            && request.generation === liveGeneration
+            && rangesEqual(request.range, liveRange)
+        );
+    }
+
+    function makeAIBridgeEnvelope(type, requestId, payload) {
+        return {
+            v: AI_PROTOCOL_VERSION,
+            type: type,
+            requestId: requestId,
+            payload: payload
+        };
+    }
+
+    function makeAICancelEnvelope(request) {
+        if (!request) {
+            return null;
+        }
+        return makeAIBridgeEnvelope(
+            "advisor.cancel",
+            request.requestId,
+            {
+                rangeBinding: request.rangeBinding,
+                generation: request.generation,
+                operation: request.kind
+            }
+        );
+    }
+
+    function postAIBridgeEnvelope(envelope) {
+        var bridge = nativeAIBridge();
+        if (!bridge) {
+            return false;
+        }
+
+        var serialized;
+        try {
+            serialized = JSON.stringify(envelope);
+        } catch (error) {
+            return false;
+        }
+        var contractLimit = window.RotorLensAIContract
+            && window.RotorLensAIContract.MAX_REQUEST_BYTES;
+        var maximumBytes = isFiniteNumber(contractLimit)
+            ? Math.min(AI_MAX_REQUEST_BYTES, contractLimit)
+            : AI_MAX_REQUEST_BYTES;
+        if (utf8ByteLength(serialized) > maximumBytes) {
+            return false;
+        }
+
+        try {
+            bridge.postMessage(serialized);
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function makeAIRequest(kind, range) {
+        return {
+            requestId: createAIRequestId(),
+            rangeBinding: createAIRequestId(),
+            generation: generation,
+            range: copyRange(range),
+            kind: kind,
+            timeoutId: null,
+            coachEnvelope: null
         };
     }
 
@@ -567,11 +841,482 @@
         mechanicalContainer.empty();
     }
 
+    function setAICoachState(state, detail) {
+        if (!cacheElements()) {
+            return;
+        }
+
+        var information = detail || {};
+        aiCoachState = state;
+        aiCoachRetryKind = state === "error" && information.retryKind === "status"
+            ? "status" : null;
+        aiCoachAction.prop("disabled", false);
+
+        if (state !== "result") {
+            aiCoachResult.attr("hidden", true).empty();
+        }
+
+        switch (state) {
+        case "not-installed":
+            aiModelReady = false;
+            aiCoachStatus.text("The private on-device model is not installed yet.");
+            aiCoachAction.text("Download ~329 MiB model");
+            break;
+        case "downloading":
+            aiModelReady = false;
+            var percent = isFiniteNumber(information.percent)
+                ? Math.max(0, Math.min(100, information.percent)) : null;
+            aiCoachStatus.text(
+                percent === null
+                    ? "Downloading the on-device model…"
+                    : "Downloading the on-device model… " + formatNumber(percent, 0) + "%"
+            );
+            aiCoachAction.text(
+                aiCoachRequest && aiCoachRequest.kind === "download"
+                    ? "Cancel model download" : "Check download status"
+            );
+            break;
+        case "ready":
+            aiModelReady = true;
+            aiCoachStatus.text("The on-device model is ready to explain this exact selected range.");
+            aiCoachAction.text("Explain selected range");
+            break;
+        case "running":
+            aiCoachStatus.text("AI Coach is prioritizing validated findings on this phone…");
+            aiCoachAction.text("Cancel AI Coach");
+            break;
+        case "result":
+            aiModelReady = true;
+            aiCoachStatus.text("Explanation complete for this exact selected range.");
+            aiCoachAction.text("Explain selected range again");
+            aiCoachResult.removeAttr("hidden");
+            break;
+        case "error":
+            aiCoachStatus.text(information.message || AI_ERROR_MESSAGES.INTERNAL);
+            aiCoachAction.text(
+                aiCoachRetryKind === "status"
+                    ? "Retry model check"
+                    : (aiModelReady ? "Try AI Coach again" : "Retry model download")
+            );
+            break;
+        default:
+            aiModelReady = false;
+            aiCoachState = "unavailable";
+            aiCoachStatus.text(information.message || AI_ERROR_MESSAGES.AI_UNAVAILABLE);
+            aiCoachAction.text("AI Coach unavailable").prop("disabled", true);
+            break;
+        }
+    }
+
+    function clearAIRequestTimer(request) {
+        if (request && request.timeoutId !== null) {
+            clearTimeout(request.timeoutId);
+            request.timeoutId = null;
+        }
+    }
+
+    function cancelAICoachRequest(sendNativeCancel) {
+        var request = aiCoachRequest;
+        if (!request) {
+            return null;
+        }
+
+        clearAIRequestTimer(request);
+        aiCoachRequest = null;
+        if (sendNativeCancel !== false) {
+            postAIBridgeEnvelope(makeAICancelEnvelope(request));
+        }
+        return request;
+    }
+
+    function clearAICoachPresentation() {
+        cancelAICoachRequest(true);
+        aiCoachBinding = null;
+        aiModelReady = false;
+        aiCoachRetryKind = null;
+        aiCoachState = "unavailable";
+        if (aiCoachSection && aiCoachSection.length) {
+            aiCoachSection.attr("hidden", true);
+            aiCoachStatus.text("Checking on-device AI availability…");
+            aiCoachResult.attr("hidden", true).empty();
+            aiCoachAction.text("Check AI Coach").prop("disabled", true);
+        }
+    }
+
+    function aiRequestTimeout(request) {
+        if (aiCoachRequest !== request) {
+            return;
+        }
+        cancelAICoachRequest(true);
+        setAICoachState("error", {
+            message: AI_ERROR_MESSAGES.TIMEOUT,
+            retryKind: retryKindForAIError(request.kind, "TIMEOUT")
+        });
+    }
+
+    function retryKindForAIError(requestKind, errorCode) {
+        // MODEL_NOT_INSTALLED and AI_UNAVAILABLE are handled before this helper.
+        // Every remaining status failure should retry verification, never download.
+        return requestKind === "status" ? "status" : null;
+    }
+
+    function aiRetryRequestKind(state, modelReady, retryKind) {
+        if (state === "error" && retryKind === "status") {
+            return "status";
+        }
+        if (state === "not-installed" || (state === "error" && !modelReady)) {
+            return "download";
+        }
+        if (state === "ready" || state === "result" || state === "error") {
+            return "explain";
+        }
+        return null;
+    }
+
+    function armAIRequestTimeout(request) {
+        clearAIRequestTimer(request);
+        var delay = request.kind === "download"
+            ? AI_DOWNLOAD_TIMEOUT_MS
+            : (request.kind === "status" ? AI_STATUS_TIMEOUT_MS : AI_REQUEST_TIMEOUT_MS);
+        request.timeoutId = setTimeout(function() {
+            aiRequestTimeout(request);
+        }, delay);
+    }
+
+    function commonAIBridgePayload(request) {
+        return {
+            rangeBinding: request.rangeBinding,
+            generation: request.generation,
+            selection: copyRange(request.range)
+        };
+    }
+
+    function beginAIBridgeRequest(kind) {
+        if (!aiCoachBinding
+                || aiCoachBinding.generation !== generation
+                || !rangesEqual(readSelectedRange(), aiCoachBinding.range)) {
+            setAICoachState("error", {
+                message: "The graph In/Out range changed. Analyze it again before using AI Coach."
+            });
+            return false;
+        }
+
+        cancelAICoachRequest(true);
+        aiCoachRetryKind = null;
+        var request = makeAIRequest(kind, aiCoachBinding.range);
+        var envelope;
+
+        if (kind === "explain") {
+            var contract = window.RotorLensAIContract;
+            if (!contract || typeof contract.buildCoachEnvelope !== "function") {
+                setAICoachState("unavailable", {
+                    message: "The AI Coach safety contract is unavailable in this build."
+                });
+                return false;
+            }
+            try {
+                request.coachEnvelope = contract.buildCoachEnvelope({
+                    advisorPackage: aiCoachBinding.advisorPackage,
+                    mechanicalResult: aiCoachBinding.mechanicalResult,
+                    recommendationValidation: aiCoachBinding.recommendationValidation,
+                    selectedRange: copyRange(request.range),
+                    requestId: request.requestId,
+                    rangeBinding: request.rangeBinding,
+                    generation: request.generation
+                });
+            } catch (error) {
+                setAICoachState("error", {
+                    message: "AI Coach could not build a safe selected-range fact package."
+                });
+                return false;
+            }
+            envelope = makeAIBridgeEnvelope(
+                "advisor.explain",
+                request.requestId,
+                request.coachEnvelope
+            );
+        } else {
+            envelope = makeAIBridgeEnvelope(
+                kind === "download" ? "advisor.download" : "advisor.status",
+                request.requestId,
+                commonAIBridgePayload(request)
+            );
+        }
+
+        aiCoachRequest = request;
+        if (kind === "download") {
+            setAICoachState("downloading");
+        } else if (kind === "explain") {
+            setAICoachState("running");
+        } else {
+            aiCoachStatus.text("Checking on-device AI availability…");
+            aiCoachAction.text("Checking AI Coach…").prop("disabled", true);
+        }
+
+        if (!postAIBridgeEnvelope(envelope)) {
+            aiCoachRequest = null;
+            setAICoachState("unavailable", {
+                message: "The secure on-device AI bridge is unavailable in this build."
+            });
+            return false;
+        }
+        if (aiCoachRequest === request) {
+            armAIRequestTimeout(request);
+        }
+        return true;
+    }
+
+    function registryText(registry, code) {
+        var entry = registry && registry[code];
+        return entry && typeof entry.text === "string" ? entry.text : null;
+    }
+
+    function coachFactValue(fact) {
+        if (!fact || !Object.prototype.hasOwnProperty.call(fact, "value")) {
+            return null;
+        }
+        var contract = window.RotorLensAIContract;
+        var definition = contract && contract.FACT_REGISTRY
+            && contract.FACT_REGISTRY[fact.id];
+        if (!definition || typeof definition.label !== "string") {
+            return null;
+        }
+        var value = fact.value;
+        var presented;
+        if (typeof value === "number" && Number.isFinite(value)) {
+            presented = formatNumber(value, Number.isInteger(value) ? 0 : 2);
+        } else if (typeof value === "boolean") {
+            presented = value ? "Yes" : "No";
+        } else if (typeof value === "string" && value.length <= 96) {
+            presented = value;
+        } else {
+            return null;
+        }
+
+        if (typeof definition.unit === "string" && definition.unit.length > 0
+                && definition.unit !== "boolean") {
+            presented += definition.unit === "percent"
+                ? "%" : " " + definition.unit.replace(/-/g, " ");
+        }
+        return definition.label + ": " + presented;
+    }
+
+    function renderCodeOnlyCoachResult(response, request) {
+        var contract = window.RotorLensAIContract;
+        var messageRegistry = contract && contract.MESSAGE_REGISTRY;
+        var nextStepRegistry = contract && contract.NEXT_STEP_REGISTRY;
+        var factsById = Object.create(null);
+        (request.coachEnvelope.facts || []).forEach(function(fact) {
+            if (fact && typeof fact.id === "string") {
+                factsById[fact.id] = fact;
+            }
+        });
+
+        aiCoachResult.empty();
+        append(aiCoachResult[0], element("h6", null, "AI-prioritized validated findings"));
+
+        (response.cards || []).forEach(function(card) {
+            var message = registryText(messageRegistry, card.messageCode);
+            if (!message) {
+                return;
+            }
+            append(aiCoachResult[0], element("p", "tune-advisor-ai-message", message));
+
+            var factLines = (card.evidenceRefs || []).map(function(reference) {
+                return coachFactValue(factsById[reference]);
+            }).filter(Boolean);
+            if (factLines.length > 0) {
+                var factList = append(
+                    aiCoachResult[0],
+                    element("ul", "tune-advisor-ai-facts")
+                );
+                factLines.forEach(function(line) {
+                    append(factList, element("li", null, line));
+                });
+            }
+        });
+
+        if (response.proposalRef === "validated-governor-f-next-test"
+                && aiCoachBinding
+                && aiCoachBinding.recommendationValidation
+                && aiCoachBinding.recommendationValidation.state === "valid") {
+            var recommendation = aiCoachBinding.recommendationValidation.recommendation;
+            append(aiCoachResult[0], element(
+                "p",
+                "tune-advisor-ai-proposal",
+                "Validated deterministic next test remains Governor F "
+                    + formatNumber(recommendation.currentValue, 1) + " → "
+                    + formatNumber(recommendation.proposedValue, 1)
+                    + "; keep " + formatNumber(recommendation.rollbackValue, 1)
+                    + " as the rollback value. AI did not choose or modify these numbers."
+            ));
+        }
+
+        var nextSteps = (response.nextStepCodes || []).map(function(code) {
+            return registryText(nextStepRegistry, code);
+        }).filter(Boolean);
+        if (nextSteps.length > 0) {
+            append(aiCoachResult[0], element("h6", null, "Bounded next steps"));
+            var nextStepList = append(
+                aiCoachResult[0],
+                element("ul", "tune-advisor-ai-next-steps")
+            );
+            nextSteps.forEach(function(step) {
+                append(nextStepList, element("li", null, step));
+            });
+        }
+
+        append(aiCoachResult[0], element(
+            "p",
+            "tune-advisor-ai-limitation",
+            "Selected-range explanation only · not a component diagnosis or flightworthiness claim · no setting write."
+        ));
+        setAICoachState("result");
+    }
+
+    function handleAIBridgeMessage(eventOrValue) {
+        var message = parseAIBridgeMessage(eventOrValue);
+        var request = aiCoachRequest;
+        if (!message || !responseMatchesAIRequest(
+            message,
+            request,
+            generation,
+            readSelectedRange()
+        ) || !responseTypeMatchesAIRequest(message.type, request.kind)
+                || !validAIBridgePayloadShape(message)) {
+            return false;
+        }
+
+        var payload = message.payload;
+        if (message.type === "advisor.download.progress") {
+            setAICoachState("downloading", {
+                percent: payload.downloadedBytes / payload.totalBytes * 100
+            });
+            armAIRequestTimeout(request);
+            return true;
+        }
+
+        clearAIRequestTimer(request);
+        aiCoachRequest = null;
+
+        if (message.type === "advisor.error") {
+            var errorCode = typeof payload.code === "string"
+                && AI_ERROR_MESSAGES[payload.code]
+                ? payload.code : "INTERNAL";
+            if (errorCode === "AI_UNAVAILABLE") {
+                setAICoachState("unavailable", { message: AI_ERROR_MESSAGES[errorCode] });
+            } else if (errorCode === "MODEL_NOT_INSTALLED") {
+                setAICoachState("not-installed");
+            } else {
+                setAICoachState("error", {
+                    message: AI_ERROR_MESSAGES[errorCode],
+                    retryKind: retryKindForAIError(request.kind, errorCode)
+                });
+            }
+            return true;
+        }
+
+        if (message.type === "advisor.status.result"
+                || message.type === "advisor.download.result") {
+            if (payload.state === "ready") {
+                setAICoachState("ready");
+            } else if (payload.state === "not-installed") {
+                setAICoachState("not-installed");
+            } else if (payload.state === "downloading") {
+                setAICoachState("downloading");
+            } else if (payload.state === "unavailable") {
+                setAICoachState("unavailable");
+            } else {
+                setAICoachState("error", { message: AI_ERROR_MESSAGES.REQUEST_INVALID });
+                return false;
+            }
+            return true;
+        }
+
+        if (message.type !== "advisor.explain.result"
+                || !request.coachEnvelope) {
+            setAICoachState("error", { message: AI_ERROR_MESSAGES.REQUEST_INVALID });
+            return false;
+        }
+
+        var contract = window.RotorLensAIContract;
+        if (!contract || typeof contract.validateCoachResponse !== "function") {
+            setAICoachState("unavailable", {
+                message: "The AI Coach safety contract is unavailable in this build."
+            });
+            return false;
+        }
+        try {
+            var validated = contract.validateCoachResponse(payload, {
+                envelope: request.coachEnvelope,
+                requestId: request.requestId,
+                rangeBinding: request.rangeBinding,
+                generation: request.generation,
+                selectedRange: copyRange(request.range)
+            });
+            renderCodeOnlyCoachResult(validated, request);
+            return true;
+        } catch (error) {
+            setAICoachState("error", {
+                message: "AI Coach rejected a malformed or unbound explanation."
+            });
+            return false;
+        }
+    }
+
+    function bindNativeAIBridge() {
+        var bridge = nativeAIBridge();
+        if (!bridge) {
+            return false;
+        }
+        if (!aiBridgeBound) {
+            bridge.onmessage = handleAIBridgeMessage;
+            aiBridgeBound = true;
+        }
+        return true;
+    }
+
+    function prepareAICoach(
+        evidencePackage,
+        submittedRange,
+        recommendationValidation,
+        mechanicalValidation
+    ) {
+        cancelAICoachRequest(true);
+        aiCoachBinding = {
+            advisorPackage: evidencePackage,
+            mechanicalResult: mechanicalValidation && mechanicalValidation.state === "valid"
+                ? mechanicalValidation.result : null,
+            recommendationValidation: recommendationValidation,
+            range: copyRange(submittedRange),
+            generation: generation
+        };
+        aiCoachSection.removeAttr("hidden");
+        aiCoachResult.attr("hidden", true).empty();
+
+        if (!window.RotorLensAIContract
+                || typeof window.RotorLensAIContract.buildCoachEnvelope !== "function"
+                || typeof window.RotorLensAIContract.validateCoachResponse !== "function") {
+            setAICoachState("unavailable", {
+                message: "The AI Coach safety contract is unavailable in this build."
+            });
+            return;
+        }
+        if (!bindNativeAIBridge()) {
+            setAICoachState("unavailable", {
+                message: "On-device AI is not available in this app host yet. The deterministic Tune Advisor result above is still complete."
+            });
+            return;
+        }
+        beginAIBridgeRequest("status");
+    }
+
     function showError(message) {
         if (!cacheElements()) {
             return;
         }
 
+        clearAICoachPresentation();
         progressContainer.attr("hidden", true);
         results.attr("hidden", true);
         withheldSection.attr("hidden", true);
@@ -594,6 +1339,7 @@
             return;
         }
 
+        clearAICoachPresentation();
         renderPendingLogSummary();
         errorBox.attr("hidden", true).empty();
         results.attr("hidden", true);
@@ -2274,6 +3020,12 @@
         applyRecommendationNotice(gateState, recommendationValidation);
         renderMechanicalResult(mechanicalValidation);
         renderMeasurements(evidencePackage);
+        prepareAICoach(
+            evidencePackage,
+            submittedRange,
+            recommendationValidation,
+            mechanicalValidation
+        );
         errorBox.attr("hidden", true).empty();
         results.removeAttr("hidden");
         progressContainer.removeAttr("hidden");
@@ -2288,6 +3040,7 @@
             activeJob.cancelled = true;
             activeJob = null;
         }
+        cancelAICoachRequest(true);
     }
 
     function invalidatePresentation(message) {
@@ -2296,6 +3049,7 @@
         }
         generation++;
         cancelActiveJob();
+        clearAICoachPresentation();
         currentPackage = null;
         currentPackageRange = null;
         currentMechanicalState = null;
@@ -2575,6 +3329,34 @@
             startAnalysis(true);
         });
 
+        aiCoachAction.on("click.rotorLensTuneAdvisor", function() {
+            if (!aiCoachBinding || $(this).prop("disabled")) {
+                return;
+            }
+            if (aiCoachState === "running") {
+                var cancelled = cancelAICoachRequest(true);
+                setAICoachState(cancelled ? "ready" : "error");
+                return;
+            }
+            if (aiCoachState === "downloading") {
+                var cancelledDownload = cancelAICoachRequest(true);
+                if (cancelledDownload && cancelledDownload.kind === "download") {
+                    setAICoachState("not-installed");
+                } else {
+                    beginAIBridgeRequest("status");
+                }
+                return;
+            }
+            var retryRequestKind = aiRetryRequestKind(
+                aiCoachState,
+                aiModelReady,
+                aiCoachRetryKind
+            );
+            if (retryRequestKind) {
+                beginAIBridgeRequest(retryRequestKind);
+            }
+        });
+
         confirmationInputs.on("change.rotorLensTuneAdvisor", function() {
             var key = this.getAttribute("data-confirmation");
             if (!hasConfirmationKey(key)) {
@@ -2619,6 +3401,7 @@
 
         modal.on("hidden.bs.modal.rotorLensTuneAdvisor", function() {
             cancelActiveJob();
+            clearAICoachPresentation();
             confirmationBusy = false;
             confirmationNotice = "";
             updateConfirmationUi();
@@ -2644,7 +3427,21 @@
             exactCanonicalConfirmationIds: exactCanonicalConfirmationIds,
             hasCuratedWithheldReason: hasCuratedWithheldReason,
             validateMechanicalResult: validateMechanicalResult,
-            applyMechanicalRecommendationBoundary: applyMechanicalRecommendationBoundary
+            applyMechanicalRecommendationBoundary: applyMechanicalRecommendationBoundary,
+            aiBridgeAvailable: aiBridgeAvailable,
+            parseAIBridgeMessage: parseAIBridgeMessage,
+            responseMatchesAIRequest: responseMatchesAIRequest,
+            responseTypeMatchesAIRequest: responseTypeMatchesAIRequest,
+            validAIBridgePayloadShape: validAIBridgePayloadShape,
+            makeAIBridgeEnvelope: makeAIBridgeEnvelope,
+            makeAICancelEnvelope: makeAICancelEnvelope,
+            postAIBridgeEnvelope: postAIBridgeEnvelope,
+            utf8ByteLength: utf8ByteLength,
+            commonAIBridgePayload: commonAIBridgePayload,
+            retryKindForAIError: retryKindForAIError,
+            aiRetryRequestKind: aiRetryRequestKind,
+            aiStatusTimeoutMs: AI_STATUS_TIMEOUT_MS,
+            aiRequestTimeoutMs: AI_REQUEST_TIMEOUT_MS
         });
     }
     window.RotorLensTuneAdvisorUI = advisorApi;

@@ -17,6 +17,39 @@ const INNER_BOUNDS_HEIGHT = 480;
 
 const INITIAL_APP_PAGE = "index.html";
 
+// Graph/video seeking can produce fractional microseconds. Canonicalize once
+// at the authoritative marker boundary so every selected-range consumer sees
+// the same exact, JSON-safe integer endpoints.
+function canonicalAnalysisMarkerTime(time) {
+    if (!Number.isFinite(time)) {
+        return false;
+    }
+    var integerTime = Math.round(time);
+    return Number.isSafeInteger(integerTime) ? integerTime : false;
+}
+
+function nextAnalysisMarkerRange(inTime, outTime, changedMarker, markerTime) {
+    var canonicalTime = canonicalAnalysisMarkerTime(markerTime);
+    if (changedMarker === "in") {
+        inTime = canonicalTime;
+        if (Number.isFinite(inTime)
+                && Number.isFinite(outTime)
+                && outTime <= inTime) {
+            // The latest marker wins when rounding makes the range cross/equal.
+            outTime = false;
+        }
+    } else if (changedMarker === "out") {
+        outTime = canonicalTime;
+        if (Number.isFinite(inTime)
+                && Number.isFinite(outTime)
+                && inTime >= outTime) {
+            // The latest marker wins when rounding makes the range cross/equal.
+            inTime = false;
+        }
+    }
+    return { inTime: inTime, outTime: outTime };
+}
+
 function BlackboxLogViewer() {
     function supportsRequiredAPIs() {
         return window.File && window.FileReader && window.FileList && Modernizr.canvas;
@@ -526,12 +559,14 @@ function BlackboxLogViewer() {
     }
 
     function setVideoInTime(inTime) {
-        videoExportInTime = Number.isFinite(inTime) ? inTime : false;
-        if (Number.isFinite(videoExportInTime)
-                && Number.isFinite(videoExportOutTime)
-                && videoExportOutTime <= videoExportInTime) {
-            videoExportOutTime = false;
-        }
+        var nextRange = nextAnalysisMarkerRange(
+            videoExportInTime,
+            videoExportOutTime,
+            "in",
+            inTime
+        );
+        videoExportInTime = nextRange.inTime;
+        videoExportOutTime = nextRange.outTime;
 
         if (seekBar) {
             seekBar.setInTime(videoExportInTime);
@@ -543,12 +578,14 @@ function BlackboxLogViewer() {
     }
 
     function setVideoOutTime(outTime) {
-        videoExportOutTime = Number.isFinite(outTime) ? outTime : false;
-        if (Number.isFinite(videoExportInTime)
-                && Number.isFinite(videoExportOutTime)
-                && videoExportInTime >= videoExportOutTime) {
-            videoExportInTime = false;
-        }
+        var nextRange = nextAnalysisMarkerRange(
+            videoExportInTime,
+            videoExportOutTime,
+            "out",
+            outTime
+        );
+        videoExportInTime = nextRange.inTime;
+        videoExportOutTime = nextRange.outTime;
 
         if (seekBar) {
             seekBar.setInTime(videoExportInTime);
@@ -1959,7 +1996,8 @@ function BlackboxLogViewer() {
                 switch (e.which) {
                     case "I".charCodeAt(0):
                         if (!(shifted)) {
-                            if (videoExportInTime === currentBlackboxTime) {
+                            if (videoExportInTime
+                                    === canonicalAnalysisMarkerTime(currentBlackboxTime)) {
                                 setVideoInTime(false)
                             } else {
                                 setVideoInTime(currentBlackboxTime);
@@ -1970,7 +2008,8 @@ function BlackboxLogViewer() {
                     break;
                     case "O".charCodeAt(0):
                         if (!(shifted)) {
-                            if (videoExportOutTime === currentBlackboxTime) {
+                            if (videoExportOutTime
+                                    === canonicalAnalysisMarkerTime(currentBlackboxTime)) {
                                 setVideoOutTime(false);
                             } else {
                                 setVideoOutTime(currentBlackboxTime);

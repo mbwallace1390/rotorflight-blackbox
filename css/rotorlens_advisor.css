@@ -243,7 +243,9 @@
 .tune-advisor-error[hidden],
 .tune-advisor-withheld-section[hidden],
 .tune-advisor-recommendation-section[hidden],
-.tune-advisor-mechanical-section[hidden] {
+.tune-advisor-mechanical-section[hidden],
+.tune-advisor-ai-section[hidden],
+.tune-advisor-ai-result[hidden] {
     display: none !important;
 }
 
@@ -726,6 +728,96 @@
     text-align: center;
 }
 
+.tune-advisor-ai-section {
+    background: #f2f8fb;
+    border: 1px solid #c7dde7;
+    border-left: 5px solid #0b7fa3;
+    border-radius: 3px;
+    padding: 15px 16px 16px;
+}
+
+.tune-advisor-ai-section.tune-advisor-section + .tune-advisor-section,
+.tune-advisor-section + .tune-advisor-ai-section {
+    margin-top: 24px;
+}
+
+.tune-advisor-ai-badge {
+    background-color: #0b7fa3;
+    font-size: 9px;
+    letter-spacing: 0.55px;
+    white-space: normal;
+}
+
+.tune-advisor-ai-boundary {
+    background: #fff;
+    border: 1px solid #d3e3ea;
+    border-radius: 3px;
+    color: #314c59;
+    line-height: 1.5;
+    margin-top: 9px;
+    overflow-wrap: anywhere;
+    padding: 11px 12px;
+}
+
+.tune-advisor-ai-boundary strong {
+    color: #173744;
+}
+
+.tune-advisor-ai-download-note,
+.tune-advisor-ai-status {
+    color: #526a75;
+    line-height: 1.45;
+    margin: 10px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.tune-advisor-ai-download-note {
+    font-size: 11px;
+}
+
+.tune-advisor-ai-status {
+    font-weight: 600;
+}
+
+.tune-advisor-ai-result {
+    background: #fff;
+    border: 1px solid #c7dce5;
+    border-radius: 3px;
+    color: #273f49;
+    line-height: 1.5;
+    margin-top: 11px;
+    overflow-wrap: anywhere;
+    padding: 12px;
+}
+
+.tune-advisor-ai-result h6 {
+    color: #173744;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 0 7px;
+}
+
+.tune-advisor-ai-result p,
+.tune-advisor-ai-result ul {
+    margin-bottom: 0;
+}
+
+.tune-advisor-ai-result ul {
+    padding-left: 20px;
+}
+
+.tune-advisor-ai-result li + li {
+    margin-top: 5px;
+}
+
+.tune-advisor-ai-action {
+    margin-top: 12px;
+    min-height: 44px;
+    min-width: 180px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
 @media (max-width: 767px) {
     .tune-advisor-dialog .modal-header {
         padding: 13px 14px 11px;
@@ -837,5 +929,13 @@
 
     .tune-advisor-recommendation-card {
         padding: 12px;
+    }
+
+    .tune-advisor-ai-section {
+        padding: 12px 10px;
+    }
+
+    .tune-advisor-ai-action {
+        width: 100%;
     }
 }

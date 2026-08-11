@@ -3,6 +3,7 @@ package io.github.mbwallace1390.rotorlens;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -12,6 +13,36 @@ import java.util.List;
 import org.junit.Test;
 
 public class ViewerActivityTest {
+    @Test
+    public void startUrlIsBoundToCurrentViewerAssets() {
+        assertEquals(
+            "https://appassets.androidplatform.net/assets/index.html?v=120",
+            ViewerActivity.START_URL
+        );
+    }
+
+    @Test
+    public void restoresWebViewOnlyForExactAssetVersion() {
+        assertTrue(ViewerActivity.shouldRestoreWebViewState("120"));
+        assertFalse(ViewerActivity.shouldRestoreWebViewState("119"));
+        assertFalse(ViewerActivity.shouldRestoreWebViewState("118"));
+        assertFalse(ViewerActivity.shouldRestoreWebViewState("121"));
+        assertFalse(ViewerActivity.shouldRestoreWebViewState("malformed"));
+        assertFalse(ViewerActivity.shouldRestoreWebViewState(null));
+    }
+
+    @Test
+    public void versionedStartUrlRemainsARecognizedLocalViewerPage() {
+        assertTrue(ViewerActivity.isLocalViewerUrl(ViewerActivity.START_URL));
+        assertTrue(ViewerActivity.isLocalViewerUrl(
+            "https://appassets.androidplatform.net/assets/js/main.js?v=120"
+        ));
+        assertFalse(ViewerActivity.isLocalViewerUrl(
+            "https://example.com/assets/index.html?v=120"
+        ));
+        assertFalse(ViewerActivity.isLocalViewerUrl(null));
+    }
+
     @Test
     public void staleAcknowledgementCannotPruneNewerImport() {
         LinkedHashMap<String, String> resources = resources("A", "B");

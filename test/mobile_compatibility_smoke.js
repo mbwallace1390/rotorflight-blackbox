@@ -12,6 +12,18 @@ function source(relativePath) {
     return fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
 }
 
+function analysisMarkerTestHooks() {
+    const mainSource = source("js/main.js");
+    const helperStart = mainSource.indexOf("function canonicalAnalysisMarkerTime(");
+    const helperEnd = mainSource.indexOf("function BlackboxLogViewer()");
+    assert.ok(helperStart >= 0 && helperEnd > helperStart);
+    const context = vm.createContext({ Number });
+    vm.runInContext(mainSource.slice(helperStart, helperEnd), context, {
+        filename: "js/main.js#analysis-marker-helpers"
+    });
+    return context;
+}
+
 function assertMobileAssetURLs() {
     const craftSource = source("js/craft_3d.js");
     const exporterSource = source("js/csv-exporter.js");
@@ -68,6 +80,20 @@ function assertNativeOpenSeam() {
     assert.ok(androidHostSource.includes("pruneAcknowledgedSharedLogs("));
     assert.ok(androidHostSource.includes("sharedLogs.get(token)"));
     assert.ok(!androidHostSource.includes("/shared/current"));
+    assert.ok(androidHostSource.includes('VIEWER_ASSET_VERSION = "120"'));
+    assert.ok(androidHostSource.includes('"/assets/index.html?v=" + VIEWER_ASSET_VERSION'));
+    assert.ok(androidHostSource.includes("shouldRestoreWebViewState(savedAssetVersion)"));
+    assert.ok(androidHostSource.includes("webView.restoreState(savedInstanceState)"));
+    assert.ok(androidHostSource.includes("webView.loadUrl(START_URL)"));
+    assert.ok(androidHostSource.includes(
+        "outState.putString(STATE_VIEWER_ASSET_VERSION, VIEWER_ASSET_VERSION)"
+    ));
+    assert.ok(
+        androidHostSource.indexOf("restoreSharedLog(savedInstanceState)")
+            < androidHostSource.indexOf("shouldRestoreWebViewState(savedAssetVersion)"),
+        "Shared-log restoration must remain independent of WebView asset-state restoration"
+    );
+    assert.ok(androidHostSource.includes("new AdvisorAiBridge(this, webView, START_URL)"));
     assert.ok(iosSchemeSource.includes("read(upToCount: 512 * 1024)"));
     assert.ok(
         source("mobile/ios/RotorflightBlackbox/RotorflightViewerController.swift")
@@ -149,8 +175,23 @@ function assertTuneAdvisorSelectedRangeContract() {
     const uiSource = source("js/advisor/advisor_ui.js");
     const htmlSource = source("index.html");
     const platformSource = source("index.js");
+    const androidHostSource = source(
+        "mobile/android/app/src/main/java/io/github/mbwallace1390/rotorlens/ViewerActivity.java"
+    );
+    const nativeAssetVersion = androidHostSource.match(
+        /VIEWER_ASSET_VERSION = "([0-9]+)"/
+    );
+    const platformAssetVersion = platformSource.match(
+        /androidAssetVersion = "([0-9]+)"/
+    );
+    assert.ok(nativeAssetVersion && platformAssetVersion);
+    assert.strictEqual(nativeAssetVersion[1], "120");
+    assert.strictEqual(platformAssetVersion[1], nativeAssetVersion[1]);
+    const viewerAssetVersion = nativeAssetVersion[1];
 
     assert.ok(mainSource.includes("function getSelectedAnalysisRange()"));
+    assert.ok(mainSource.includes("function canonicalAnalysisMarkerTime(time)"));
+    assert.ok(mainSource.includes("nextAnalysisMarkerRange("));
     assert.ok(mainSource.includes("function syncGraphAnalysisRange()"));
     assert.ok(mainSource.includes('$(document).trigger("rotorlens:analysis-range-change"'));
     assert.ok(
@@ -168,6 +209,8 @@ function assertTuneAdvisorSelectedRangeContract() {
     assert.ok(rulesSource.includes('finalTuneClaim: false'));
     assert.ok(rulesSource.includes("118e912"));
     assert.ok(uiSource.includes("function evidenceRangeWithinSelection("));
+    assert.ok(uiSource.includes("Number.isSafeInteger(range.startTimeUs)"));
+    assert.ok(uiSource.includes("Number.isSafeInteger(range.endTimeUs)"));
     assert.ok(uiSource.includes("timeRangeUs[0] < timeRangeUs[1]"));
     assert.ok(uiSource.includes("function renderResults(evidencePackage, submittedRange, mechanicalState)"));
     assert.ok(uiSource.includes("function validateMechanicalResult(mechanicalResult, submittedRange)"));
@@ -192,20 +235,415 @@ function assertTuneAdvisorSelectedRangeContract() {
         assert.ok(htmlSource.includes('data-confirmation="' + confirmationId + '"'));
     });
     [
-        "css/rotorlens_advisor.css?v=117",
-        "js/advisor/evidence_contract.js?v=117",
-        "js/advisor/deterministic_metrics.js?v=117",
-        "js/advisor/rules.js?v=117",
-        "js/advisor/flightlog_adapter.js?v=117",
-        "js/advisor/mechanical_analysis.js?v=117",
-        "js/advisor/advisor_ui.js?v=117"
-    ].forEach(function(assetUrl) {
+        "css/rotorlens_advisor.css",
+        "js/advisor/evidence_contract.js",
+        "js/advisor/deterministic_metrics.js",
+        "js/advisor/rules.js",
+        "js/advisor/flightlog_adapter.js",
+        "js/advisor/mechanical_analysis.js",
+        "js/advisor/ai_contract.js",
+        "js/advisor/advisor_ui.js",
+        "js/main.js",
+        "index.js"
+    ].forEach(function(assetPath) {
+        var assetUrl = assetPath + "?v=" + viewerAssetVersion;
         assert.ok(htmlSource.includes(assetUrl), "Missing versioned Advisor asset " + assetUrl);
     });
-    assert.ok(platformSource.includes('androidAssetVersion = "117"'));
+    assert.ok(
+        htmlSource.indexOf("js/advisor/ai_contract.js?v=" + viewerAssetVersion)
+            < htmlSource.indexOf("js/advisor/advisor_ui.js?v=" + viewerAssetVersion),
+        "The strict AI safety contract must load before the Advisor UI"
+    );
+
+    const markerHooks = analysisMarkerTestHooks();
+    assert.strictEqual(
+        markerHooks.canonicalAnalysisMarkerTime(8009840.6044273665),
+        8009841
+    );
+    assert.strictEqual(
+        markerHooks.canonicalAnalysisMarkerTime(14105537.12570931),
+        14105537
+    );
+    assert.strictEqual(markerHooks.canonicalAnalysisMarkerTime(Infinity), false);
+    assert.strictEqual(
+        markerHooks.canonicalAnalysisMarkerTime(Number.MAX_SAFE_INTEGER + 1),
+        false
+    );
+    const crossedIn = markerHooks.nextAnalysisMarkerRange(
+        8000000,
+        14105537,
+        "in",
+        14105536.7
+    );
+    assert.strictEqual(crossedIn.inTime, 14105537);
+    assert.strictEqual(crossedIn.outTime, false);
+    const crossedOut = markerHooks.nextAnalysisMarkerRange(
+        8009841,
+        14105537,
+        "out",
+        8009840.6
+    );
+    assert.strictEqual(crossedOut.inTime, false);
+    assert.strictEqual(crossedOut.outTime, 8009841);
+    assert.ok(htmlSource.includes("AI Coach for this selected range"));
+    assert.ok(htmlSource.includes("not the raw log, settings, identity, or measured fact values"));
+    assert.ok(htmlSource.includes("AI chooses which allowed validated finding and next step appear first"));
+    assert.ok(htmlSource.includes("native code creates and validates every displayed card"));
+    assert.ok(htmlSource.includes("approximately 329 MiB one-time model download"));
+    assert.ok(htmlSource.includes('aria-live="polite"'));
+    assert.ok(source("css/rotorlens_advisor.css").includes("min-height: 44px"));
     assert.ok(htmlSource.includes("Spectrum patterns are inspection clues, not a component diagnosis."));
     assert.ok(htmlSource.includes("does not recommend PID or Governor changes"));
     assert.ok(source("css/rotorlens_advisor.css").includes(".tune-advisor-spectrum-grid"));
+}
+
+function assertTuneAdvisorAIBridgeRuntime() {
+    const sentMessages = [];
+    const advisorWindow = {
+        __ROTORLENS_ADVISOR_TEST__: true,
+        jQuery: function() {
+            // Do not invoke the document-ready callback; these hooks are pure.
+            return {};
+        }
+    };
+    const context = vm.createContext({
+        Date,
+        Math,
+        URL,
+        document: {},
+        window: advisorWindow
+    });
+
+    vm.runInContext(source("js/advisor/advisor_ui.js"), context, {
+        filename: "js/advisor/advisor_ui.js"
+    });
+
+    const hooks = advisorWindow.RotorLensTuneAdvisorUI.testHooks;
+    assert.strictEqual(
+        hooks.aiBridgeAvailable(),
+        false,
+        "The AI Coach must fail closed when its native WebMessage bridge is absent"
+    );
+
+    advisorWindow.advisorAI = {
+        postMessage: function(serialized) {
+            sentMessages.push(serialized);
+        }
+    };
+    assert.strictEqual(hooks.aiBridgeAvailable(), true);
+    assert.strictEqual(hooks.aiStatusTimeoutMs, 125000);
+    assert.strictEqual(hooks.aiRequestTimeoutMs, 125000);
+    assert.strictEqual(
+        hooks.retryKindForAIError("status", "TIMEOUT"),
+        "status",
+        "A timed-out model verification must retain status retry routing"
+    );
+    assert.strictEqual(hooks.retryKindForAIError("status", "CANCELLED"), "status");
+    assert.strictEqual(hooks.retryKindForAIError("status", "BUSY"), "status");
+    assert.strictEqual(hooks.retryKindForAIError("explain", "TIMEOUT"), null);
+    assert.strictEqual(
+        hooks.aiRetryRequestKind("error", false, "status"),
+        "status",
+        "The status-timeout CTA must retry model verification, not download"
+    );
+    assert.strictEqual(hooks.aiRetryRequestKind("error", false, null), "download");
+    assert.strictEqual(hooks.aiRetryRequestKind("error", true, null), "explain");
+
+    const markerHooks = analysisMarkerTestHooks();
+    const request = {
+        requestId: "11111111-1111-4111-8111-111111111111",
+        rangeBinding: "22222222-2222-4222-8222-222222222222",
+        generation: 7,
+        range: {
+            startTimeUs: markerHooks.canonicalAnalysisMarkerTime(8009840.6044273665),
+            endTimeUs: markerHooks.canonicalAnalysisMarkerTime(14105537.12570931)
+        },
+        kind: "explain"
+    };
+    const exactReply = hooks.makeAIBridgeEnvelope(
+        "advisor.status.result",
+        request.requestId,
+        {
+            rangeBinding: request.rangeBinding,
+            generation: request.generation,
+            state: "ready"
+        }
+    );
+    assert.strictEqual(
+        hooks.responseMatchesAIRequest(
+            exactReply,
+            request,
+            request.generation,
+            request.range
+        ),
+        true
+    );
+    [
+        Object.assign({}, exactReply, { requestId: "33333333-3333-4333-8333-333333333333" }),
+        Object.assign({}, exactReply, {
+            payload: Object.assign({}, exactReply.payload, {
+                rangeBinding: "44444444-4444-4444-8444-444444444444"
+            })
+        }),
+        Object.assign({}, exactReply, {
+            payload: Object.assign({}, exactReply.payload, { generation: 8 })
+        })
+    ].forEach(function(staleReply) {
+        assert.strictEqual(
+            hooks.responseMatchesAIRequest(
+                staleReply,
+                request,
+                request.generation,
+                request.range
+            ),
+            false,
+            "A stale or differently-bound AI reply must be discarded"
+        );
+    });
+    assert.strictEqual(
+        hooks.responseMatchesAIRequest(exactReply, request, 8, request.range),
+        false,
+        "A reply from an earlier log/range generation must be discarded"
+    );
+    assert.strictEqual(
+        hooks.responseMatchesAIRequest(
+            exactReply,
+            request,
+            request.generation,
+            { startTimeUs: request.range.startTimeUs, endTimeUs: request.range.endTimeUs + 1 }
+        ),
+        false,
+        "A reply must remain bound to the exact live graph In/Out range"
+    );
+    assert.strictEqual(
+        hooks.responseTypeMatchesAIRequest("advisor.status.result", "status"),
+        true
+    );
+    assert.strictEqual(
+        hooks.responseTypeMatchesAIRequest("advisor.status.result", "explain"),
+        false,
+        "A correctly-bound reply of the wrong operation type must be discarded"
+    );
+    assert.strictEqual(hooks.validAIBridgePayloadShape(exactReply), true);
+    assert.strictEqual(
+        hooks.validAIBridgePayloadShape(Object.assign({}, exactReply, {
+            payload: Object.assign({}, exactReply.payload, { modelText: "ignore me" })
+        })),
+        false,
+        "Status payloads must not accept unrecognized or model-authored fields"
+    );
+    assert.strictEqual(
+        hooks.validAIBridgePayloadShape(hooks.makeAIBridgeEnvelope(
+            "advisor.download.progress",
+            request.requestId,
+            {
+                rangeBinding: request.rangeBinding,
+                generation: request.generation,
+                state: "downloading",
+                downloadedBytes: 12,
+                totalBytes: 10
+            }
+        )),
+        false,
+        "Impossible download progress must fail closed"
+    );
+    assert.strictEqual(
+        hooks.validAIBridgePayloadShape(hooks.makeAIBridgeEnvelope(
+            "advisor.error",
+            request.requestId,
+            {
+                rangeBinding: request.rangeBinding,
+                generation: request.generation,
+                code: "MODEL_WROTE_SETTINGS"
+            }
+        )),
+        false,
+        "Only the stable local error-code registry is accepted"
+    );
+
+    assert.strictEqual(hooks.parseAIBridgeMessage("{"), null);
+    assert.strictEqual(hooks.parseAIBridgeMessage(null), null);
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage(JSON.stringify(Object.assign({}, exactReply, { v: 2 }))),
+        null
+    );
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage(JSON.stringify(Object.assign({}, exactReply, {
+            type: "advisor.unknown.result"
+        }))),
+        null
+    );
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage(JSON.stringify(Object.assign({}, exactReply, {
+            requestId: "short"
+        }))),
+        null
+    );
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage(JSON.stringify(Object.assign({}, exactReply, {
+            payload: "model-authored prose"
+        }))),
+        null
+    );
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage(JSON.stringify(Object.assign({}, exactReply, {
+            unsupported: true
+        }))),
+        null,
+        "Unexpected outer fields must fail closed"
+    );
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage("x".repeat(9217)),
+        null,
+        "Oversized native replies must fail closed before JSON parsing"
+    );
+    assert.strictEqual(
+        hooks.parseAIBridgeMessage(JSON.stringify(exactReply)).requestId,
+        request.requestId
+    );
+
+    const cancel = hooks.makeAICancelEnvelope(request);
+    assert.strictEqual(cancel.v, 1);
+    assert.strictEqual(cancel.type, "advisor.cancel");
+    assert.strictEqual(cancel.requestId, request.requestId);
+    assert.strictEqual(cancel.payload.rangeBinding, request.rangeBinding);
+    assert.strictEqual(cancel.payload.generation, request.generation);
+    assert.strictEqual(cancel.payload.operation, "explain");
+
+    const statusRequest = hooks.makeAIBridgeEnvelope(
+        "advisor.status",
+        request.requestId,
+        hooks.commonAIBridgePayload(request)
+    );
+    assert.strictEqual(Number.isSafeInteger(statusRequest.payload.selection.startTimeUs), true);
+    assert.strictEqual(Number.isSafeInteger(statusRequest.payload.selection.endTimeUs), true);
+    assert.strictEqual(statusRequest.payload.selection.startTimeUs, 8009841);
+    assert.strictEqual(statusRequest.payload.selection.endTimeUs, 14105537);
+    assert.strictEqual(hooks.postAIBridgeEnvelope(statusRequest), true);
+    assert.strictEqual(sentMessages.length, 1);
+    assert.strictEqual(JSON.parse(sentMessages[0]).v, 1);
+    assert.strictEqual(
+        hooks.postAIBridgeEnvelope(hooks.makeAIBridgeEnvelope(
+            "advisor.explain",
+            request.requestId,
+            { oversized: "x".repeat(32768) }
+        )),
+        false,
+        "Serialized AI requests must be capped at 32 KiB"
+    );
+    assert.strictEqual(sentMessages.length, 1);
+    assert.strictEqual(hooks.utf8ByteLength("\ud83d\ude81"), 4);
+}
+
+function assertNativeAIBridgeProtocolAlignment() {
+    const protocolSource = source(
+        "mobile/android/app/src/main/java/io/github/mbwallace1390/rotorlens/AdvisorAiProtocol.java"
+    );
+    const bridgeSource = source(
+        "mobile/android/app/src/main/java/io/github/mbwallace1390/rotorlens/AdvisorAiBridge.java"
+    );
+    const serviceSource = source(
+        "mobile/android/app/src/main/java/io/github/mbwallace1390/rotorlens/AdvisorAiService.java"
+    );
+    const statusMethod = serviceSource.slice(
+        serviceSource.indexOf("void handleStatus("),
+        serviceSource.indexOf("void startDownload(")
+    );
+    const finishMethod = serviceSource.slice(
+        serviceSource.indexOf("private boolean finish("),
+        serviceSource.indexOf("private boolean isCurrent(")
+    );
+    const timeoutMethod = serviceSource.slice(
+        serviceSource.indexOf("private void timeout("),
+        serviceSource.indexOf("private void cancelResources(")
+    );
+
+    assert.ok(protocolSource.includes("static final int VERSION = 1;"));
+    assert.ok(protocolSource.includes("static final int MAX_REQUEST_BYTES = 32 * 1024;"));
+    [
+        'TYPE_STATUS = "advisor.status"',
+        'TYPE_DOWNLOAD = "advisor.download"',
+        'TYPE_EXPLAIN = "advisor.explain"',
+        'TYPE_CANCEL = "advisor.cancel"',
+        'TYPE_STATUS_RESULT = "advisor.status.result"',
+        'TYPE_DOWNLOAD_PROGRESS = "advisor.download.progress"',
+        'TYPE_DOWNLOAD_RESULT = "advisor.download.result"',
+        'TYPE_EXPLAIN_RESULT = "advisor.explain.result"',
+        'TYPE_ERROR = "advisor.error"'
+    ].forEach(function(protocolLiteral) {
+        assert.ok(
+            protocolSource.includes(protocolLiteral),
+            "Native and WebView AI protocol types must remain aligned: " + protocolLiteral
+        );
+    });
+    assert.ok(protocolSource.includes("requireExactKeys(outer, OUTER_KEYS"));
+    assert.ok(protocolSource.includes('outer.addProperty("v", VERSION)'));
+    assert.ok(protocolSource.includes('outer.addProperty("type", type)'));
+    assert.ok(protocolSource.includes('outer.addProperty("requestId", request.requestId)'));
+    assert.ok(protocolSource.includes('outer.add("payload", payload)'));
+    assert.ok(protocolSource.includes('payload.addProperty("rangeBinding", request.rangeBinding)'));
+    assert.ok(protocolSource.includes('payload.addProperty("generation", request.generation)'));
+    assert.ok(protocolSource.includes('payload.addProperty("state", state)'));
+    assert.ok(protocolSource.includes('payload.addProperty("code", code)'));
+
+    assert.ok(bridgeSource.includes('LISTENER_NAME = "advisorAI"'));
+    assert.ok(bridgeSource.includes("WebViewCompat.addWebMessageListener("));
+    assert.ok(bridgeSource.includes("Collections.singleton(ALLOWED_ORIGIN)"));
+    assert.ok(bridgeSource.includes("!isMainFrame"));
+    assert.ok(bridgeSource.includes("!isExactOrigin(sourceOrigin)"));
+    assert.ok(
+        bridgeSource.includes("!isExpectedPageUrl(expectedPageUrl, sourceView.getUrl())"),
+        "AI bridge ingress must remain bound to the pinned viewer document"
+    );
+    assert.ok(
+        bridgeSource.includes("isExpectedPageUrl(expectedPageUrl, webView.getUrl())"),
+        "AI bridge replies must remain bound to the pinned viewer document"
+    );
+    assert.ok(bridgeSource.includes("actualPageUrl.indexOf('#')"));
+    assert.ok(bridgeSource.includes("replyProxy.postMessage(response)"));
+    assert.ok(!bridgeSource.includes("addJavascriptInterface"));
+
+    assert.ok(statusMethod.includes('sendStatus(request, responder, "downloading")'));
+    assert.ok(
+        !statusMethod.includes("downloadedBytes") && !statusMethod.includes("totalBytes"),
+        "advisor.status.result must keep its exact three-field payload"
+    );
+    assert.ok(serviceSource.includes('payload.addProperty("downloadedBytes", downloadedBytes)'));
+    assert.ok(serviceSource.includes('payload.addProperty("totalBytes", totalBytes)'));
+    assert.ok(serviceSource.includes("TYPE_DOWNLOAD_PROGRESS"));
+    assert.ok(serviceSource.includes("INFERENCE_TIMEOUT_SECONDS = 120L"));
+    assert.ok(serviceSource.includes("STATUS_VERIFICATION_TIMEOUT_SECONDS = 120L"));
+    assert.ok(statusMethod.includes("STATUS_VERIFICATION_TIMEOUT_SECONDS"));
+    assert.ok(statusMethod.includes("() -> timeout(operation)"));
+    assert.strictEqual(
+        (statusMethod.match(/timeout\(operation\)/g) || []).length,
+        1,
+        "Status verification must arm exactly one native terminal timeout"
+    );
+    assert.ok(finishMethod.includes("if (active != operation) return false;"));
+    assert.ok(finishMethod.includes("active = null;"));
+    assert.ok(timeoutMethod.includes("if (active != operation) return;"));
+    assert.ok(timeoutMethod.includes("active = null;"));
+    assert.ok(timeoutMethod.includes("operation.cancelled.set(true);"));
+    assert.ok(timeoutMethod.includes("future.cancel(true)"));
+    assert.ok(timeoutMethod.includes("AdvisorAiProtocol.ERROR_TIMEOUT"));
+    assert.ok(
+        source("js/advisor/advisor_ui.js").includes("AI_STATUS_TIMEOUT_MS = 125000"),
+        "The JS watchdog must leave delivery headroom after native's 120s timeout"
+    );
+    assert.ok(
+        source("js/advisor/advisor_ui.js").includes("AI_REQUEST_TIMEOUT_MS = 125000"),
+        "The inference watchdog must leave delivery headroom after native's 120s timeout"
+    );
+    assert.ok(
+        125000 > 120 * 1000,
+        "The Web watchdog must fire after the native timeout can deliver one bound reply"
+    );
+    assert.ok(!serviceSource.includes("RotorLensAiDiag"));
+    assert.ok(!serviceSource.includes("model output code-only="));
+    assert.ok(!source(
+        "mobile/android/app/src/main/java/io/github/mbwallace1390/rotorlens/AdvisorAiRuntime.kt"
+    ).includes("RotorLensAiDiag"));
 }
 
 function assertTuneAdvisorResultValidationRuntime() {
@@ -833,6 +1271,8 @@ const runPromise = (async function run() {
     assertMobileHeaderDialogLayout();
     assertSpectrumRangeCap();
     assertTuneAdvisorSelectedRangeContract();
+    assertTuneAdvisorAIBridgeRuntime();
+    assertNativeAIBridgeProtocolAlignment();
     assertTuneAdvisorResultValidationRuntime();
     await assertRealMechanicalResultsPassUiValidator();
 

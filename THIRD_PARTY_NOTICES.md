@@ -18,6 +18,8 @@ required by `docs/release-compliance.md`.
 | react-native-safe-area-context | 5.8.1 | MIT | `mobile/node_modules/react-native-safe-area-context/LICENSE` |
 | AndroidX Activity | 1.13.0 | Apache-2.0 | resolved AAR `META-INF/androidx/activity/activity/LICENSE.txt` |
 | AndroidX WebKit | 1.16.0 | Apache-2.0 | resolved AAR `META-INF/androidx/webkit/webkit/LICENSE.txt` |
+| LiteRT-LM Android | 0.15.0 | Apache-2.0 | resolved AAR root `LICENSE` and `THIRD_PARTY_NOTICE.txt` |
+| Qwen3-0.6B LiteRT model | revision `8414150f2e9dcc82449bcc9c5abc404b399a4d06` | Apache-2.0 | pinned `litert-community/Qwen3-0.6B` repository license and model identity below |
 | complex.js and real.js | checked-in revision | BSD-2-Clause | complete headers in `js/complex.js` and `js/real.js` |
 | Propwash analysis design | commit `804d3d5dd447c2e6067b02b7e1723aae8a19d5ff` | MIT | pinned upstream `LICENSE` and analysis sources |
 
@@ -33,6 +35,15 @@ required by `docs/release-compliance.md`.
 - React and React Native: Copyright (c) Meta Platforms, Inc. and affiliates.
 - react-native-safe-area-context: Copyright (c) 2019 Th3rd Wave.
 - AndroidX Activity and AndroidX WebKit: The Android Open Source Project.
+- LiteRT-LM: The LiteRT-LM Authors. The pinned Android AAR's complete
+  `THIRD_PARTY_NOTICE.txt` is extracted verbatim at build time to
+  `legal/LITERTLM-0.15.0-THIRD_PARTY_NOTICE.txt` and bundled with the app.
+- Qwen3-0.6B is not bundled in the APK. The app downloads only
+  `Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm` after explicit user consent from
+  revision `8414150f2e9dcc82449bcc9c5abc404b399a4d06` of
+  `litert-community/Qwen3-0.6B`. The expected artifact is 344,437,808 bytes
+  with SHA-256
+  `e3e290109da4388d65a17510a0c66af91c8039f52d2c465868dbc43c09a776cf`.
 - complex.js and real.js: Copyright (c) 2012 Jens Nockert
   <jens@ofmlabs.org>, Jussi Kalliokoski <jussi@ofmlabs.org>.
 - Propwash: Copyright (c) 2026 Iteratrix. RotorLens's selected-range
@@ -103,8 +114,11 @@ The following text is reproduced from `js/complex.js` and `js/real.js`:
 
 ### Apache License 2.0
 
-The complete Apache License 2.0 text extracted from both resolved AndroidX AAR
-artifacts is included at `legal/APACHE-2.0.txt`.
+The complete Apache License 2.0 text extracted from resolved Android artifacts
+is included at `legal/APACHE-2.0.txt`. It applies to AndroidX, LiteRT-LM, and
+the downloaded Qwen3-0.6B model as identified above. LiteRT-LM's additional
+native-dependency notices are carried separately from its pinned AAR at build
+time as described above.
 
 ### WebM Writer license notice
 
