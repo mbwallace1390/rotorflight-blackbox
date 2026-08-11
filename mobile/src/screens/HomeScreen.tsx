@@ -13,11 +13,15 @@ import { RotorMark } from '../components/RotorMark';
 import { palette, type } from '../theme';
 
 type HomeScreenProps = {
+  isMassStorageLaunching?: boolean;
+  onGetLogsFromFlightController?: () => void;
   onOpenLog: () => void;
   onOpenLegal?: () => void;
 };
 
 export function HomeScreen({
+  isMassStorageLaunching = false,
+  onGetLogsFromFlightController,
   onOpenLog,
   onOpenLegal,
 }: HomeScreenProps): React.JSX.Element {
@@ -72,13 +76,63 @@ export function HomeScreen({
               <Text style={styles.openArrow}>↗</Text>
             </View>
             <View style={styles.openCopy}>
-              <Text style={styles.openTitle}>Open flight log</Text>
+              <Text
+                style={[styles.openTitle, compact && styles.openTitleCompact]}
+              >
+                Open flight log
+              </Text>
               <Text style={styles.openFormats}>
                 BBL · BFL · CFL · LOG · TXT
               </Text>
             </View>
             <Text style={styles.openAction}>CHOOSE</Text>
           </Pressable>
+
+          {onGetLogsFromFlightController ? (
+            <Pressable
+              accessibilityHint="Opens Rotorflight Configurator. Tap Mass Storage there, then return to RotorLens and Files opens automatically"
+              accessibilityLabel="Get logs from flight controller"
+              accessibilityRole="button"
+              accessibilityState={{
+                busy: isMassStorageLaunching,
+                disabled: isMassStorageLaunching,
+              }}
+              disabled={isMassStorageLaunching}
+              onPress={onGetLogsFromFlightController}
+              style={({ pressed }) => [
+                styles.massStorageButton,
+                pressed && styles.massStorageButtonPressed,
+                isMassStorageLaunching && styles.massStorageButtonDisabled,
+              ]}
+            >
+              <View style={styles.massStorageIcon}>
+                <Text style={styles.massStorageArrow}>⇄</Text>
+              </View>
+              <View style={styles.massStorageCopy}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[
+                    styles.massStorageTitle,
+                    compact && styles.massStorageTitleCompact,
+                  ]}
+                >
+                  {isMassStorageLaunching
+                    ? 'Opening Rotorflight Configurator…'
+                    : 'Get logs from flight controller'}
+                </Text>
+                <Text style={styles.massStorageInstructions}>
+                  Opens Rotorflight Configurator. Tap Mass Storage, then return
+                  to RotorLens; Files opens automatically.
+                </Text>
+              </View>
+              <Text
+                accessibilityElementsHidden
+                style={styles.massStorageAction}
+              >
+                {isMassStorageLaunching ? 'WAIT' : 'START'}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <View
             style={[
@@ -286,6 +340,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.15,
   },
+  openTitleCompact: {
+    fontSize: 20,
+  },
   openFormats: {
     color: palette.ink,
     fontFamily: type.data,
@@ -300,6 +357,73 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.1,
+  },
+  massStorageButton: {
+    alignItems: 'center',
+    backgroundColor: palette.panel,
+    borderColor: palette.line,
+    borderRadius: 7,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginBottom: 12,
+    marginTop: 12,
+    minHeight: 108,
+    paddingHorizontal: 17,
+    paddingVertical: 14,
+  },
+  massStorageButtonPressed: {
+    backgroundColor: palette.panelRaised,
+    borderColor: palette.sky,
+  },
+  massStorageButtonDisabled: {
+    opacity: 0.65,
+  },
+  massStorageIcon: {
+    alignItems: 'center',
+    borderColor: palette.sky,
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  massStorageArrow: {
+    color: palette.sky,
+    fontFamily: type.data,
+    fontSize: 21,
+    lineHeight: 24,
+  },
+  massStorageCopy: {
+    flex: 1,
+    flexShrink: 1,
+    marginHorizontal: 15,
+  },
+  massStorageTitle: {
+    color: palette.mist,
+    fontFamily: type.display,
+    fontSize: 19,
+    fontWeight: '800',
+    letterSpacing: 0.1,
+    lineHeight: 22,
+  },
+  massStorageTitleCompact: {
+    fontSize: 17,
+    lineHeight: 20,
+  },
+  massStorageInstructions: {
+    color: palette.muted,
+    fontFamily: type.body,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 6,
+  },
+  massStorageAction: {
+    color: palette.sky,
+    flexShrink: 0,
+    fontFamily: type.data,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   instrumentStrip: {
     borderBottomColor: palette.line,

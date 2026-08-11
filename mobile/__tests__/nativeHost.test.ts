@@ -1,10 +1,14 @@
 import { NativeModules } from 'react-native';
 
-import { openNativeViewer } from '../src/native/rotorflightHost';
+import {
+  beginMassStorageImport,
+  openNativeViewer,
+} from '../src/native/rotorflightHost';
 
 type MutableNativeModules = typeof NativeModules & {
   RotorflightHost?: {
-    openViewer(pickImmediately: boolean): Promise<boolean>;
+    beginMassStorageImport?(): Promise<unknown>;
+    openViewer?(pickImmediately: boolean): Promise<boolean>;
   };
 };
 
@@ -25,5 +29,72 @@ describe('Rotorflight native host adapter', () => {
 
     await expect(openNativeViewer(true)).resolves.toBe(true);
     expect(openViewer).toHaveBeenCalledWith(true);
+  });
+
+  it('reports a missing mass-storage bridge without throwing', async () => {
+    modules.RotorflightHost = {};
+
+    await expect(beginMassStorageImport()).resolves.toEqual({
+      status: 'host-unavailable',
+    });
+  });
+
+  it('returns validated launch metadata from the native bridge', async () => {
+    const launched = {
+      status: 'launched',
+      requestId: 'request-42',
+      expiresAtMs: 1_800_000_000_000,
+      ignoredNativeField: true,
+    };
+    const begin = jest.fn().mockResolvedValue(launched);
+    modules.RotorflightHost = { beginMassStorageImport: begin };
+
+    await expect(beginMassStorageImport()).resolves.toEqual({
+      status: 'launched',
+      requestId: 'request-42',
+      expiresAtMs: 1_800_000_000_000,
+    });
+    expect(begin).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'configurator-unavailable',
+    'host-not-foreground',
+    'launch-failed',
+  ] as const)('passes through the %s status', async status => {
+    modules.RotorflightHost = {
+      beginMassStorageImport: jest.fn().mockResolvedValue({ status }),
+    };
+
+    await expect(beginMassStorageImport()).resolves.toEqual({ status });
+  });
+
+  it.each([
+    null,
+    {},
+    { status: 'unexpected' },
+    { status: 'launched', requestId: '', expiresAtMs: 1_800_000_000_000 },
+    { status: 'launched', requestId: 'request-42', expiresAtMs: NaN },
+    { status: 'launched', requestId: 'request-42', expiresAtMs: 0 },
+  ])('fails closed for malformed native result %#', async result => {
+    modules.RotorflightHost = {
+      beginMassStorageImport: jest.fn().mockResolvedValue(result),
+    };
+
+    await expect(beginMassStorageImport()).resolves.toEqual({
+      status: 'launch-failed',
+    });
+  });
+
+  it('converts a rejected native launch into a safe failure status', async () => {
+    modules.RotorflightHost = {
+      beginMassStorageImport: jest
+        .fn()
+        .mockRejectedValue(new Error('native launch failed')),
+    };
+
+    await expect(beginMassStorageImport()).resolves.toEqual({
+      status: 'launch-failed',
+    });
   });
 });

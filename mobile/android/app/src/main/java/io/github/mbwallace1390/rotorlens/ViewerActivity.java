@@ -49,6 +49,8 @@ import java.util.concurrent.Executors;
 public final class ViewerActivity extends ComponentActivity {
     public static final String EXTRA_PICK_IMMEDIATELY =
         "io.github.mbwallace1390.rotorlens.extra.PICK_IMMEDIATELY";
+    public static final String EXTRA_PICK_REQUEST_ID =
+        "io.github.mbwallace1390.rotorlens.extra.PICK_REQUEST_ID";
 
     private static final int WEB_FILE_CHOOSER_REQUEST = 1001;
     private static final int IMMEDIATE_LOG_PICKER_REQUEST = 1002;
@@ -80,6 +82,7 @@ public final class ViewerActivity extends ComponentActivity {
     private volatile String sharedLogMimeType = DEFAULT_MIME_TYPE;
     private boolean pageReady;
     private volatile boolean destroyed;
+    private PickerRequestDeduplicator pickerRequestDeduplicator;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -88,6 +91,8 @@ public final class ViewerActivity extends ComponentActivity {
 
         webView = findViewById(R.id.viewer_web_view);
         configureBackNavigation();
+        pickerRequestDeduplicator =
+            MassStorageImportPreferences.pickerRequestDeduplicator(this);
         restoreSharedLog(savedInstanceState);
         pruneImportDirectory();
         configureWebView();
@@ -171,9 +176,18 @@ public final class ViewerActivity extends ComponentActivity {
             return;
         }
 
+        String requestId = intent.getStringExtra(EXTRA_PICK_REQUEST_ID);
+
         // Consume the command so a configuration/state restoration cannot reopen it.
         intent.removeExtra(EXTRA_PICK_IMMEDIATELY);
-        webView.post(this::launchImmediateLogPicker);
+        intent.removeExtra(EXTRA_PICK_REQUEST_ID);
+        webView.post(() -> {
+            // Existing direct picker launches intentionally have no request ID.
+            // Handoff launches persist their claim before touching the picker.
+            if (requestId == null || pickerRequestDeduplicator.claim(requestId)) {
+                launchImmediateLogPicker();
+            }
+        });
     }
 
     private void launchImmediateLogPicker() {
