@@ -11,3 +11,17 @@ Please search for existing issues *before* creating new ones.
 # Developers
 
 Please refer to the development section in the [this folder](https://github.com/betaflight/betaflight/tree/master/docs/development).
+
+## Lightweight logic checks
+
+Run `node test/run-node-tests.js` using the Node version in `.nvmrc`.
+This runs the existing browser expo tests and focused variable-byte, signed-field,
+bounded-stream, and curve-math checks against the actual JavaScript modules.
+Reported failures from the old browser harness now exit with an error in CI.
+No package installation or desktop app build is required for this check.
+
+The separate **Blackbox decoder and math checks** workflow runs on pull requests
+and pushes to `master` and `RF-*`, or manually. Existing platform builds and
+release triggers are unchanged. These logic checks do not exercise NW.js UI,
+device integration, or complete real-world flight-log playback.
+Weekly grouped Actions dependency proposals require review and never auto-merge.

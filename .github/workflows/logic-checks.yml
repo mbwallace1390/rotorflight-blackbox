@@ -1,0 +1,29 @@
+name: Blackbox decoder and math checks
+
+on:
+  push:
+    branches: [master, 'RF-*']
+  pull_request:
+    branches: [master, 'RF-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blackbox-logic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Run browser math tests and binary decoder checks
+        run: node test/run-node-tests.js
